@@ -7,5 +7,8 @@
 #define KG_WIFI_SSID ""
 #define KG_WIFI_PASS ""
 
+/* Mode atelier (montre sur USB) : mot de passe des mises à jour OTA, facultatif mais conseillé. */
+#define KG_OTA_PASS ""
+
 /* Tranche 4 : clé API STM (GTFS temps réel), facultative. */
 #define KG_STM_API_KEY ""

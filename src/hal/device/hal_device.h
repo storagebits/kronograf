@@ -46,3 +46,7 @@ void net_start_time_sync(void);
 const char *net_status(void);
 
 void console_poll(void);
+void console_tcp_enable(bool on);
+
+/* Mode atelier : sur USB, Wi-Fi + OTA + console TCP (cf. DECISIONS). */
+void net_workshop_loop(void);

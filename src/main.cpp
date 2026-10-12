@@ -35,6 +35,7 @@ void setup()
 
 void loop()
 {
+    net_workshop_loop();
     console_poll();
     power_loop();
     if (!power_screen_on()) { /* écran éteint : aucun rendu LVGL */

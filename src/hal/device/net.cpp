@@ -7,6 +7,7 @@
 #include "hal_device.h"
 #include "kg_secrets.h"
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 
@@ -73,4 +74,62 @@ const char *hal_time_hint(void)
 {
     if (hal_time_valid()) return nullptr;
     return KG_HAS_WIFI ? "Synchro de l'heure…" : "Configurer dans secrets.h";
+}
+
+/* ------------------------------------------------------------ mode atelier
+ * Montre sur USB (donc sur secteur) et Wi-Fi configuré : Wi-Fi maintenu, OTA et
+ * console TCP actifs. Débranchée : tout est coupé, l'autonomie n'est pas touchée.
+ * Désactivable à la compilation (-D KG_WORKSHOP=0). */
+#ifndef KG_WORKSHOP
+#define KG_WORKSHOP 1
+#endif
+#ifndef KG_OTA_PASS
+#define KG_OTA_PASS ""
+#endif
+
+static bool s_workshop, s_ota_ready;
+
+static void workshop_start(void)
+{
+    s_workshop = true;
+    s_ota_ready = false;
+    WiFi.persistent(false);
+    WiFi.setHostname("kronograf");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(KG_WIFI_SSID, KG_WIFI_PASS);
+    s_status = "atelier : connexion";
+}
+
+static void workshop_stop(void)
+{
+    s_workshop = false;
+    if (s_ota_ready) ArduinoOTA.end();
+    s_ota_ready = false;
+    console_tcp_enable(false);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    s_status = "inactif";
+}
+
+void net_workshop_loop(void)
+{
+    if (!KG_WORKSHOP || !KG_HAS_WIFI || s_task) return; /* la synchro NTP a la priorité */
+    bool usb = hal_battery().usb;
+    if (usb && !s_workshop) workshop_start();
+    else if (!usb && s_workshop) workshop_stop();
+    if (!s_workshop) return;
+
+    if (!s_ota_ready && WiFi.status() == WL_CONNECTED) {
+        ArduinoOTA.setHostname("kronograf");
+        if (sizeof(KG_OTA_PASS) > 1) ArduinoOTA.setPassword(KG_OTA_PASS);
+        ArduinoOTA.onStart([] { Serial.println("event ota start"); });
+        ArduinoOTA.onEnd([] { Serial.println("event ota end"); });
+        ArduinoOTA.onError([](ota_error_t e) { Serial.printf("event ota error %d\n", e); });
+        ArduinoOTA.begin();
+        console_tcp_enable(true);
+        s_ota_ready = true;
+        s_status = "atelier : OTA + console TCP";
+        Serial.printf("atelier : kronograf.local / %s, console TCP 2323\n", WiFi.localIP().toString().c_str());
+    }
+    if (s_ota_ready) ArduinoOTA.handle();
 }

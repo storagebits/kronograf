@@ -4,6 +4,7 @@
   tools/kg.py status                     envoie une commande et affiche la réponse
   tools/kg.py screenshot docs/screens/device/t0-diag.png
   tools/kg.py --port /dev/cu.usbserial-XXXX status
+  tools/kg.py --host kronograf.local status    mode atelier (Wi-Fi)
 
 Le port est auto-détecté (premier /dev/cu.usbserial-* ou cu.wchusbserial*).
 """
@@ -23,6 +24,12 @@ def find_port():
     if not ports:
         sys.exit("Aucun port série de montre trouvé")
     return ports[0]
+
+
+def open_tcp(host):
+    s = serial.serial_for_url(f"socket://{host}:2323", timeout=2)
+    s.reset_input_buffer()
+    return s
 
 
 def open_port(path):
@@ -125,10 +132,11 @@ def command(s, cmd, wait=1.0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port")
+    ap.add_argument("--host", help="mode atelier : console TCP, ex. kronograf.local")
     ap.add_argument("cmd")
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
-    s = open_port(a.port or find_port())
+    s = open_tcp(a.host) if a.host else open_port(a.port or find_port())
     if a.cmd == "screenshot":
         # Un log d'une autre tâche peut s'intercaler au milieu d'une rangée : on recommence.
         if not any(screenshot(s, a.args[0] if a.args else "screenshot.png") for _ in range(3)):

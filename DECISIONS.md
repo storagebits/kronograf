@@ -36,3 +36,13 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D13. Révision V1 confirmée** : le rétroéclairage répond sur GPIO12 (V2 : GPIO25, V3 : GPIO15), vibreur et quatre périphériques I²C présents.
 
 **D14. SPI écran plafonné à 40 MHz.** Le brochage T-Watch (MOSI 19, SCLK 18) ne correspond aux broches IO_MUX natives d'aucun hôte SPI : les signaux passent par la matrice GPIO, limitée à 40 MHz sur ESP32. 80 MHz n'est pas atteignable de façon fiable. Conséquence : une image pleine (115 Ko) prend ~23 ms → les animations à 60 fps devront redessiner des zones partielles (aiguilles, segments), pas l'écran entier.
+
+## Tranche 1 — 2026-10-12
+
+**D15. Validé sur montre :** NTP (Wi-Fi allumé ~3 s puis coupé, heure écrite en UTC dans le PCF8563), tactile sans inversion (coin HG → (29,28), BD → (196,210)), glissé circulaire de la lunette, extinction auto à 10 s, réveil et extinction au bouton. **Reste à valider :** réveil poignet levé et double tap (remappage BMA423 `0x88` = axes identité, non vérifié — l'utilisateur ne peut pas porter la montre pour l'instant).
+
+**D16. Trotteuse :** 8 Hz, ~17–20 ms par image à 240 MHz (rendu + SPI) pour 15–21 kpx, soit ~15 % CPU. Aiguilles vectorielles (`lv_line` sur boîte englobante) retenues ; l'option images pivotées n'a pas été prototypée : la rotation d'image LVGL 8 de 100 px de long coûterait un rendu par transformation de chaque pixel de la boîte, sans gain de netteté sur des bâtons droits.
+
+**D17. Mode atelier (avancé de la Tranche 4).** Les décrochages USB (B2) empêchaient de valider les tranches. Sur USB **et** avec Wi-Fi configuré : Wi-Fi maintenu, OTA (`pio run -e twatch-v1-ota -t upload`, `kronograf.local`) et console TCP 2323 (`tools/kg.py --host kronograf.local …`). Débranchée : Wi-Fi coupé. Justification vis-à-vis de l'anti-pattern « Wi-Fi permanent » : sur secteur, l'autonomie n'est pas en jeu ; désactivable par `-D KG_WORKSHOP=0`. Mot de passe OTA facultatif (`KG_OTA_PASS`).
+
+**D18. Pièges notés :** `sntp_get_sync_status()` remet l'état à zéro à la lecture ; ouvrir le port série sur macOS redémarre l'ESP32 (auto-reset CP210x) ; les logs d'autres tâches s'intercalent dans la sortie série (captures indexées par rangée + nouvel essai).
