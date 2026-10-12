@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+#include "../data/kg_bus.h"
+#include "../data/kg_weather.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,6 +102,22 @@ void hal_schedule_wakeup(time_t when);
 
 /* Historique des pas : out[0] = hier … out[6] = il y a 7 jours (0 si inconnu). */
 void hal_steps_history(uint32_t out[7]);
+
+/* Météo (Open-Meteo, Montréal). Copie du dernier relevé (cache persistant) ; faux si aucun.
+ * hal_weather_refresh() lance une mise à jour en tâche de fond si le relevé a plus de
+ * `max_age_s` secondes (Wi-Fi allumé le temps de la requête). Statut : NULL si tout va bien. */
+bool hal_weather(kg_weather_t *out);
+void hal_weather_refresh(uint32_t max_age_s);
+const char *hal_weather_status(void); /* dernière erreur, NULL si la dernière requête a réussi */
+bool hal_weather_busy(void);
+
+/* Bus STM (GTFS temps réel) : seulement si une clé est fournie dans secrets.h. */
+bool hal_bus_available(void);
+const char *hal_bus_stops(void);          /* codes d'arrêt suivis, « 52345,52346 » ("" : aucun) */
+void hal_bus_set_stops(const char *stops);
+bool hal_bus(kg_bus_t *out);
+void hal_bus_refresh(uint32_t max_age_s);
+const char *hal_bus_status(void);
 
 #ifdef __cplusplus
 }

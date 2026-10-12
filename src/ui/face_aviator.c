@@ -10,6 +10,7 @@
 #include "faces.h"
 #include "model.h"
 #include "theme.h"
+#include "wx_icon.h"
 #include "fonts/kg_fonts.h"
 #include "../hal/hal.h"
 #include <math.h>
@@ -47,7 +48,7 @@ static lv_obj_t *s_scr, *s_canvas;
 static lv_color_t *s_bg;
 static hand_t s_hour, s_min, s_sec, s_batt, s_chrono, s_steps;
 static lv_obj_t *s_counterweight;
-static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint;
+static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint, *s_wx_icon, *s_wx_temp;
 static float s_bezel_deg;      /* rotation de la lunette */
 static lv_coord_t s_drag_last;
 static bool s_drag_on_bezel;   /* le geste en cours appartient à la lunette */
@@ -378,6 +379,23 @@ static void update(lv_timer_t *t)
         lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
     }
 
+    /* Complication météo (coin bas gauche), relue toutes les 5 s depuis le cache. */
+    static uint32_t n;
+    if (n++ % 40 == 0) {
+        kg_weather_t wx;
+        if (hal_weather(&wx)) {
+            int v = (int)lroundf(wx.temp);
+            if (v < 0) lv_label_set_text_fmt(s_wx_temp, "\xE2\x88\x92%d°", -v);
+            else lv_label_set_text_fmt(s_wx_temp, "%d°", v);
+            kg_wx_icon_set(s_wx_icon, kg_weather_icon(wx.code, wx.day));
+            lv_obj_clear_flag(s_wx_icon, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_wx_temp, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(s_wx_icon, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_wx_temp, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     if (now.tm_mday != s_last_mday) {
         s_last_mday = now.tm_mday;
         lv_label_set_text_fmt(s_date, "%d", now.tm_mday);
@@ -459,6 +477,15 @@ static lv_obj_t *create(void)
     lv_obj_set_style_text_font(s_batt_pct, &kg_font_text_16, 0);
     lv_obj_set_style_text_color(s_batt_pct, KG_C_TEXT_DIM, 0);
     lv_obj_align(s_batt_pct, LV_ALIGN_TOP_RIGHT, -4, 2);
+
+    s_wx_icon = kg_wx_icon_create(s_scr, 18);
+    lv_obj_set_pos(s_wx_icon, 3, 219);
+    lv_obj_add_flag(s_wx_icon, LV_OBJ_FLAG_HIDDEN);
+    s_wx_temp = lv_label_create(s_scr);
+    lv_obj_set_style_text_font(s_wx_temp, &kg_font_text_16, 0);
+    lv_obj_set_style_text_color(s_wx_temp, KG_C_TEXT_DIM, 0);
+    lv_obj_set_pos(s_wx_temp, 23, 220);
+    lv_obj_add_flag(s_wx_temp, LV_OBJ_FLAG_HIDDEN);
 
     /* Petites aiguilles des sous-cadrans, puis leurs chapeaux. */
     hand_init(&s_batt, s_scr, SUB_BATT, 4, 17, 2, KG_C_HAND, 0, 0, 0);

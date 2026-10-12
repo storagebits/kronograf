@@ -11,7 +11,7 @@
 #include <string.h>
 
 static const kg_app_t *const APPS[] = {&kg_app_chrono, &kg_app_timer, &kg_app_alarms, &kg_app_steps,
-                                       &kg_app_settings};
+                                       &kg_app_weather, &kg_app_settings};
 #define N_APPS ((int)(sizeof APPS / sizeof APPS[0]))
 
 static lv_obj_t *s_launcher;
@@ -161,9 +161,6 @@ static lv_obj_t *launcher_create(void)
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_pos(l, cx - 55, cy + 28);
     }
-    /* 6e case : réservée à la météo (Tranche 4), visible mais inactive. */
-    lv_obj_t *hint = kit_label(scr, &kg_font_stencil_11, KG_C_HAIRLINE, "MÉTÉO");
-    lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 176 - 18, 42 + 2 * 76 - 6);
     lv_obj_add_event_cb(scr, launcher_gesture, LV_EVENT_GESTURE, NULL);
     return scr;
 }
@@ -317,10 +314,16 @@ static void show_alert(bool alarm)
 
 void ui_nav_test_alert(bool alarm) { show_alert(alarm); }
 
-/* Le shell : surveille le modèle et programme le prochain réveil matériel. */
+/* Le shell : surveille le modèle et programme le prochain réveil matériel. Il ne tourne
+ * qu'écran allumé : c'est là qu'il rafraîchit la météo de la complication si elle a plus de
+ * 30 min (jamais de Wi-Fi écran éteint). */
+#define WX_COMPLICATION_MAX_AGE_S (30 * 60)
+
 static void shell_tick(lv_timer_t *t)
 {
+    static uint32_t n;
     (void)t;
+    if (n++ % 40 == 8) hal_weather_refresh(WX_COMPLICATION_MAX_AGE_S); /* toutes les 10 s */
     kg_event_t ev = model_poll();
     if (ev == KG_EVT_ALARM) show_alert(true);
     else if (ev == KG_EVT_TIMER_DONE) show_alert(false);

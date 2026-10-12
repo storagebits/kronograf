@@ -228,6 +228,27 @@ static void run(char *cmd)
     } else if (!strncmp(cmd, "battsim ", 8)) {
         power_battery_sim(atoi(cmd + 8));
         s_out->println("ok (console série seulement : le Wi-Fi va se couper)");
+    } else if (!strcmp(cmd, "meteo") || !strcmp(cmd, "meteo maj")) {
+        if (cmd[5]) hal_weather_refresh(0);
+        kg_weather_t wx;
+        const char *st = hal_weather_status();
+        if (hal_weather(&wx))
+            s_out->printf("météo %.1f° (ressenti %.1f°) %s, min %.1f max %.1f, relevé il y a %ld s%s%s\n", wx.temp,
+                          wx.feels, kg_weather_label(wx.code), wx.tmin, wx.tmax, (long)(time(nullptr) - wx.fetched),
+                          st ? " — " : "", st ? st : "");
+        else s_out->printf("météo : aucun relevé (%s)\n", st ? st : "?");
+        if (hal_weather_busy()) s_out->println("mise à jour en cours");
+    } else if (!strcmp(cmd, "bus") || !strcmp(cmd, "bus maj") || !strncmp(cmd, "bus arrets ", 11)) {
+        if (!strncmp(cmd, "bus arrets ", 11)) hal_bus_set_stops(cmd + 11);
+        if (cmd[3]) hal_bus_refresh(0);
+        kg_bus_t bus;
+        const char *st = hal_bus_status();
+        s_out->printf("bus : arrêts « %s »%s%s\n", hal_bus_stops(), st ? " — " : "", st ? st : "");
+        if (hal_bus(&bus)) {
+            time_t now = time(nullptr);
+            for (int i = 0; i < bus.n; i++)
+                s_out->printf("  %s à l'arrêt %s dans %ld s\n", bus.deps[i].route, bus.deps[i].stop, (long)(bus.deps[i].t - now));
+        }
     } else if (!strcmp(cmd, "beep")) {
         static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
         hal_tones(t, 3);
@@ -258,7 +279,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 

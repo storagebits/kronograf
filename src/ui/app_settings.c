@@ -1,6 +1,6 @@
 /*
  * App Réglages : luminosité, mise en veille, cadran par défaut, format 24 h, Wi-Fi
- * (scan + saisie du mot de passe au clavier tactile), à propos.
+ * (scan + saisie du mot de passe au clavier tactile), arrêts STM suivis, à propos.
  */
 #include "nav.h"
 #include "faces.h"
@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about;
+static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_value;
 static lv_obj_t *s_timeout_btn[4], *s_face_btn[3];
 static const uint16_t TIMEOUTS[4] = {5, 10, 15, 30};
 
@@ -19,6 +19,9 @@ static const uint16_t TIMEOUTS[4] = {5, 10, 15, 30};
 static lv_obj_t *s_wifi_scr, *s_wifi_list, *s_wifi_state, *s_kb_panel, *s_ta, *s_kb_title;
 static lv_timer_t *s_scan_timer;
 static char s_chosen[33];
+
+/* Écran « arrêt STM » */
+static lv_obj_t *s_stop_scr, *s_stop_ta, *s_settings_scr;
 
 /* ------------------------------------------------------------- composants */
 
@@ -65,6 +68,11 @@ static void refresh(void)
     else lv_obj_clear_state(s_fmt24, LV_STATE_CHECKED);
     const char *ssid = hal_wifi_ssid();
     lv_label_set_text_fmt(s_wifi_value, "%s\n%s", ssid[0] ? ssid : "Aucun réseau", hal_net_status());
+
+    if (s_bus_value) {
+        const char *stops = hal_bus_stops();
+        lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "Aucun arrêt choisi");
+    }
 
     const kg_inventory_t *inv = hal_inventory();
     lv_label_set_text_fmt(s_about, "Kronograf · T-Watch 2020 V%d\nFlash %lu Mo · PSRAM %lu Ko", inv->rev,
@@ -218,6 +226,70 @@ static void wifi_open_cb(lv_event_t *e)
     lv_scr_load(s_wifi_scr);
 }
 
+/* ------------------------------------------------------------- arrêt STM */
+
+static void stop_kb_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_READY) {
+        /* Le clavier numérique n'a pas de virgule : le point sépare plusieurs arrêts. */
+        char buf[40];
+        snprintf(buf, sizeof buf, "%s", lv_textarea_get_text(s_stop_ta));
+        for (char *c = buf; *c; c++)
+            if (*c == '.') *c = ',';
+        hal_bus_set_stops(buf);
+        kit_tick();
+    }
+    refresh();
+    lv_scr_load(s_settings_scr); /* retour direct aux Réglages */
+}
+
+static lv_obj_t *stop_screen(void)
+{
+    lv_obj_t *scr = kit_screen();
+    kit_title(scr, "ARRÊT STM");
+    lv_obj_t *hint = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "Code à 5 chiffres de l'arrêt ;\n« . » entre plusieurs arrêts");
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 20);
+    s_stop_ta = lv_textarea_create(scr);
+    lv_textarea_set_one_line(s_stop_ta, true);
+    lv_textarea_set_accepted_chars(s_stop_ta, "0123456789.");
+    lv_textarea_set_max_length(s_stop_ta, 17);
+    lv_obj_set_size(s_stop_ta, 200, 36);
+    lv_obj_align(s_stop_ta, LV_ALIGN_TOP_MID, 0, 58);
+    lv_obj_set_style_text_font(s_stop_ta, &kg_font_label_20, 0);
+    lv_obj_set_style_bg_color(s_stop_ta, KG_C_SURFACE, 0);
+    lv_obj_set_style_text_color(s_stop_ta, KG_C_TEXT, 0);
+    lv_obj_set_style_border_color(s_stop_ta, KG_C_ACCENT, 0);
+    lv_obj_t *kb = lv_keyboard_create(scr);
+    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
+    lv_obj_set_size(kb, KG_W, 140);
+    lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(kb, s_stop_ta);
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_bg_color(kb, KG_C_BG, 0);
+    lv_obj_set_style_pad_all(kb, 2, 0);
+    lv_obj_set_style_pad_gap(kb, 2, 0);
+    lv_obj_set_style_bg_color(kb, KG_C_BTN, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(kb, KG_C_TEXT, LV_PART_ITEMS);
+    lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+    lv_obj_add_event_cb(kb, stop_kb_cb, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(kb, stop_kb_cb, LV_EVENT_CANCEL, NULL);
+    ui_nav_attach_back_gesture(scr);
+    return scr;
+}
+
+static void stop_open_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!s_stop_scr) s_stop_scr = stop_screen();
+    char buf[40];
+    snprintf(buf, sizeof buf, "%s", hal_bus_stops());
+    for (char *c = buf; *c; c++)
+        if (*c == ',') *c = '.';
+    lv_textarea_set_text(s_stop_ta, buf);
+    lv_scr_load(s_stop_scr);
+}
+
 /* ----------------------------------------------------------------- écran */
 
 static lv_obj_t *small_button(lv_obj_t *parent, const char *text, lv_coord_t w, lv_event_cb_t cb, int i)
@@ -229,7 +301,7 @@ static lv_obj_t *small_button(lv_obj_t *parent, const char *text, lv_coord_t w, 
 
 static lv_obj_t *create(void)
 {
-    lv_obj_t *scr = kit_screen();
+    lv_obj_t *scr = s_settings_scr = kit_screen();
     s_list = lv_obj_create(scr);
     lv_obj_remove_style_all(s_list);
     lv_obj_set_size(s_list, KG_W, KG_H);
@@ -290,6 +362,18 @@ static lv_obj_t *create(void)
     lv_obj_align(s_wifi_value, LV_ALIGN_LEFT_MID, 14, 0);
     lv_obj_t *chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
     lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
+
+    if (hal_bus_available()) { /* sans clé STM, la section n'existe pas */
+        section("BUS STM");
+        r = row(42);
+        lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_bg_color(r, KG_C_BTN_PRESS, LV_STATE_PRESSED);
+        lv_obj_add_event_cb(r, stop_open_cb, LV_EVENT_CLICKED, NULL);
+        s_bus_value = kit_label(r, &kg_font_text_16, KG_C_TEXT, "");
+        lv_obj_align(s_bus_value, LV_ALIGN_LEFT_MID, 14, 0);
+        chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
+    }
 
     section("À PROPOS");
     r = row(46);

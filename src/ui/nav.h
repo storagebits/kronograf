@@ -20,7 +20,7 @@ typedef struct {
     void (*on_hide)(void); /* facultatif : arrêter les minuteurs LVGL */
 } kg_app_t;
 
-extern const kg_app_t kg_app_chrono, kg_app_timer, kg_app_alarms, kg_app_steps, kg_app_settings;
+extern const kg_app_t kg_app_chrono, kg_app_timer, kg_app_alarms, kg_app_steps, kg_app_weather, kg_app_settings;
 
 void ui_nav_init(void);         /* après ui_faces_start() */
 void ui_nav_open_launcher(void);

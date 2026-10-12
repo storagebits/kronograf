@@ -22,6 +22,7 @@
 #define KG_C_OK        lv_color_hex(0x3FD47A)   /* vert afficheur */
 #define KG_C_WARN      lv_color_hex(0xFFB020)   /* ambre afficheur */
 #define KG_C_ALERT     lv_color_hex(0xFF3B30)   /* rouge afficheur */
+#define KG_C_RAIN      lv_color_hex(0x5FA8FF)   /* gouttes de pluie */
 
 /* Cadran « Chronographe aviateur » */
 #define KG_C_DIAL        lv_color_hex(0x0B0D10)   /* fond de cadran, noir bleuté */

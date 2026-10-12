@@ -164,3 +164,67 @@ void hal_wifi_set_credentials(const char *ssid, const char *pass)
 }
 const char *hal_wifi_ssid(void) { return s_ssid; }
 const char *hal_net_status(void) { return "synchronisé"; }
+
+/* Météo : vraie réponse Open-Meteo enregistrée (tests/data), heures recalées sur maintenant.
+ *   KG_WX=0 aucun relevé ; KG_WX_AGE=minutes ; KG_WX_CODE / KG_WX_TEMP pour les captures. */
+bool hal_weather(kg_weather_t *out)
+{
+    memset(out, 0, sizeof *out);
+    if (env_int("KG_WX", 1) == 0) return false;
+    static char json[4096];
+    static size_t len;
+    if (!len) {
+        FILE *f = fopen(KG_ROOT "/tests/data/openmeteo-montreal.json", "rb");
+        if (!f) return false;
+        len = fread(json, 1, sizeof json - 1, f);
+        fclose(f);
+    }
+    if (!kg_weather_parse(json, len, out)) return false;
+    time_t now = time(NULL);
+    out->fetched = now - env_int("KG_WX_AGE", 7) * 60;
+    for (int i = 0; i < out->n_hours; i++) out->hours[i].t = now - now % 3600 + i * 3600;
+    if (getenv("KG_WX_CODE")) out->code = (uint8_t)env_int("KG_WX_CODE", 3);
+    if (getenv("KG_WX_TEMP")) out->temp = (float)env_int("KG_WX_TEMP", 15);
+    return true;
+}
+
+void hal_weather_refresh(uint32_t max_age_s) { (void)max_age_s; }
+
+const char *hal_weather_status(void) { return env_int("KG_WX", 1) ? NULL : "Wi-Fi non configuré"; }
+
+bool hal_weather_busy(void) { return false; }
+
+/* Bus : KG_BUS=0 sans clé STM, KG_BUS_STOPS="" aucun arrêt choisi. */
+static char s_stops[40] = "52345";
+bool hal_bus_available(void) { return env_int("KG_BUS", 1) != 0; }
+const char *hal_bus_stops(void)
+{
+    const char *e = getenv("KG_BUS_STOPS");
+    return e ? e : s_stops;
+}
+void hal_bus_set_stops(const char *stops) { snprintf(s_stops, sizeof s_stops, "%s", stops); }
+
+bool hal_bus(kg_bus_t *out)
+{
+    memset(out, 0, sizeof *out);
+    if (!hal_bus_available() || !hal_bus_stops()[0]) return false;
+    static const struct { const char *route; int min; } demo[] = {{"24", 3}, {"55", 6}, {"24", 11}, {"80", 14}, {"55", 21}};
+    time_t now = time(NULL);
+    for (int i = 0; i < 5; i++) {
+        kg_bus_dep_t *d = &out->deps[out->n++];
+        snprintf(d->route, sizeof d->route, "%s", demo[i].route);
+        snprintf(d->stop, sizeof d->stop, "%s", "52345");
+        d->t = now + demo[i].min * 60 + 20;
+    }
+    out->valid = true;
+    out->fetched = now - 40;
+    return true;
+}
+
+void hal_bus_refresh(uint32_t max_age_s) { (void)max_age_s; }
+
+const char *hal_bus_status(void)
+{
+    if (!hal_bus_available()) return "Clé STM absente (secrets.h)";
+    return hal_bus_stops()[0] ? NULL : "Aucun arrêt choisi";
+}
