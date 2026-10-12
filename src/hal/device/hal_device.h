@@ -9,5 +9,6 @@ void hal_device_init(void);
 
 void display_init(void);
 float display_fps(void);
+void display_test_pattern(void);
 
 void console_poll(void);

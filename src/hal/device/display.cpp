@@ -70,8 +70,14 @@ void display_init(void)
     panel_cfg.color_space = ESP_LCD_COLOR_SPACE_RGB;
     panel_cfg.bits_per_pixel = 16;
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io, &panel_cfg, &s_panel));
+    /* Pas de broche RST : reset logiciel. Si la dalle était active (ancien firmware, redémarrage
+     * à chaud), la fiche ST7789 exige 120 ms avant SLPOUT ; esp_lcd n'en attend que 20 et la dalle
+     * reste alors en veille (rétroéclairage allumé, image noire). */
     esp_lcd_panel_reset(s_panel);
+    vTaskDelay(pdMS_TO_TICKS(150));
     esp_lcd_panel_init(s_panel);
+    esp_lcd_panel_io_tx_param(io, 0x11 /* SLPOUT */, nullptr, 0);
+    vTaskDelay(pdMS_TO_TICKS(120));
     esp_lcd_panel_invert_color(s_panel, true);       /* dalle IPS : INVON */
     esp_lcd_panel_mirror(s_panel, true, true);       /* rotation 180°, comme setRotation(2) */
     esp_lcd_panel_set_gap(s_panel, 0, GAP_Y);
@@ -102,4 +108,27 @@ float display_fps(void)
         s_fps_t0 = now;
     }
     return s_fps;
+}
+
+/* Mire de test hors LVGL : trois bandes verticales rouge | vert | bleu pendant 5 s.
+ * Sert à valider l'écran lui-même et l'ordre des couleurs (RGB/BGR). */
+void display_test_pattern(void)
+{
+    static const uint16_t colors[3] = {0xF800, 0x07E0, 0x001F};
+    size_t bytes = 80 * BUF_LINES * 2;
+    auto *band = static_cast<uint8_t *>(heap_caps_malloc(bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    if (!band) return;
+    for (int c = 0; c < 3; c++) {
+        for (size_t i = 0; i < bytes; i += 2) { /* octets poids fort d'abord, comme sur le bus SPI */
+            band[i] = colors[c] >> 8;
+            band[i + 1] = colors[c] & 0xFF;
+        }
+        for (int y = 0; y < H; y += BUF_LINES) {
+            esp_lcd_panel_draw_bitmap(s_panel, c * 80, y, c * 80 + 80, y + BUF_LINES, band);
+            vTaskDelay(pdMS_TO_TICKS(5)); /* le tampon est réutilisé : laisser la DMA finir */
+        }
+    }
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    heap_caps_free(band);
+    lv_obj_invalidate(lv_scr_act());
 }

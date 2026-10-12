@@ -2,6 +2,7 @@
  * Console série de diagnostic (115200 bauds, une commande par ligne).
  *   status      heap interne / PSRAM, FPS, batterie, uptime, révision
  *   screenshot  capture LVGL de l'écran courant, envoyée en base64 (tools/screenshot.py)
+ *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
  *   log <n>     niveau de log ESP (0 = rien … 5 = verbeux)
  *   help
  */
@@ -69,10 +70,14 @@ static void run(char *cmd)
 {
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
+    else if (!strcmp(cmd, "lcdtest")) {
+        display_test_pattern();
+        Serial.println("ok");
+    }
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         Serial.println("ok");
-    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | lcdtest | log <0-5> | help");
     else if (*cmd) Serial.printf("commande inconnue : %s\n", cmd);
 }
 

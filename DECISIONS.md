@@ -30,3 +30,9 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D10. Port série :** `/dev/cu.usbserial-*` (pilote Apple), pas `/dev/cu.SLAB_USBtoUART` (pilote Silicon Labs, échecs répétés). Téléversement à 230 400 bauds.
 
 **D11. Premier flash (Tranche 0) vérifié.** Démarrage propre ; scan I²C : AXP202, PCF8563, BMA423, FT6336 présents. PSRAM 4 Mo. `status` : heap interne 74 % libre (222 Ko / 298 Ko, budget ≥ 30 %), PSRAM 4,19 Mo libres, LVGL 18 %. RTC avec bit VL levé (heure non fiable) → réglage NTP en Tranche 1. Capture série montre = simulateur (`docs/screens/{sim,device}/t0-diag.png`). En charge, la valeur batterie passe au vert au lieu d'ajouter « Charge · » (débordait sur l'heure, vu sur la capture montre).
+
+**D12. Écran noir au premier flash — corrigé.** Symptôme : rétroéclairage allumé, image noire, alors que la capture LVGL était correcte. Cause : sans broche RST, `esp_lcd` fait un reset logiciel puis `SLPOUT` après 20 ms ; si la dalle était active (redémarrage à chaud), la fiche ST7789 exige 120 ms → `SLPOUT` ignoré, dalle en veille. Correctif : 150 ms après le reset, `SLPOUT` renvoyé, 120 ms. Validé par photo de l'utilisateur (`docs/photos/t0-diag-photo.jpg`) : orientation, ordre RGB et inversion corrects. Ajout de la commande `lcdtest` (mire R|V|B hors LVGL).
+
+**D13. Révision V1 confirmée** : le rétroéclairage répond sur GPIO12 (V2 : GPIO25, V3 : GPIO15), vibreur et quatre périphériques I²C présents.
+
+**D14. SPI écran plafonné à 40 MHz.** Le brochage T-Watch (MOSI 19, SCLK 18) ne correspond aux broches IO_MUX natives d'aucun hôte SPI : les signaux passent par la matrice GPIO, limitée à 40 MHz sur ESP32. 80 MHz n'est pas atteignable de façon fiable. Conséquence : une image pleine (115 Ko) prend ~23 ms → les animations à 60 fps devront redessiner des zones partielles (aiguilles, segments), pas l'écran entier.
