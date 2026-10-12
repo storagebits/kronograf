@@ -35,6 +35,7 @@
 #include <esp_core_dump.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <rom/rtc.h>
 #include <esp_sleep.h>
 #include <esp_task_wdt.h>
 #include <esp_log.h>
@@ -59,7 +60,8 @@ static void cmd_status(void)
     lv_mem_monitor_t lv;
     lv_mem_monitor(&lv);
     char gbuf[120];
-    s_out->printf("rev=V%d uptime=%lus reset=%d\n", inv->rev, (unsigned long)(millis() / 1000), (int)esp_reset_reason());
+    s_out->printf("rev=V%d uptime=%lus reset=%d rom=%d\n", inv->rev, (unsigned long)(millis() / 1000), (int)esp_reset_reason(),
+                  (int)rtc_get_reset_reason(0));
     s_out->printf("garde : %s\n", guard_report(gbuf, sizeof gbuf));
     s_out->printf("heap_internal free=%u/%u (%u%%) min=%u largest=%u\n", (unsigned)int_free,
                   (unsigned)int_total, (unsigned)(int_free * 100 / int_total),

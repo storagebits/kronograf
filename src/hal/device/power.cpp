@@ -373,6 +373,12 @@ static void measure_tick(void)
     if (now - s_meas_start >= s_meas_ms) {
         s_meas_ms = 0;
         s_batt_sim = false;
+        if (s_meas_n) { /* conservé en NVS : survit à un redémarrage */
+            hal_setting_set("conso_ua", (int32_t)(1000 * s_meas_sum / s_meas_n));
+            hal_setting_set("conso_max", (int32_t)(1000 * s_meas_max));
+            hal_setting_set("conso_n", (int32_t)s_meas_n);
+            hal_setting_set("conso_info", (int32_t)(s_meas_ble | (s_meas_charging ? 2 : 0) | (s_meas_screen_ms / 1000) << 2));
+        }
         return;
     }
     if (s_meas_last && now - s_meas_last < 1000) return;
@@ -389,15 +395,23 @@ static void measure_tick(void)
 
 void power_measure_print(Print &out)
 {
-    if (!s_meas_n) {
+    float avg, max;
+    uint32_t n, screen_s;
+    bool ble, charging;
+    if (s_meas_n) {
+        avg = s_meas_sum / s_meas_n, max = s_meas_max, n = s_meas_n, screen_s = s_meas_screen_ms / 1000;
+        ble = s_meas_ble, charging = s_meas_charging;
+    } else if (!s_meas_ms && hal_setting_get("conso_n", 0)) { /* dernière mesure terminée, relue en NVS */
+        int32_t info = hal_setting_get("conso_info", 0);
+        avg = hal_setting_get("conso_ua", 0) / 1000.0f, max = hal_setting_get("conso_max", 0) / 1000.0f;
+        n = hal_setting_get("conso_n", 0), screen_s = info >> 2, ble = info & 1, charging = info & 2;
+    } else {
         out.println(s_meas_ms ? "conso : mesure en cours" : "conso : aucune mesure (conso <minutes>)");
         return;
     }
-    float avg = s_meas_sum / s_meas_n;
     out.printf("conso : %s%lu échantillons, moyenne %.1f mA, pic %.1f mA, écran %lu s, BLE %s%s\n",
-               s_meas_ms ? "(en cours) " : "", (unsigned long)s_meas_n, avg, s_meas_max,
-               (unsigned long)(s_meas_screen_ms / 1000), s_meas_ble ? "actif" : "coupé",
-               s_meas_charging ? " — ATTENTION : batterie en charge, mesure faussée" : "");
+               s_meas_ms ? "(en cours) " : "", (unsigned long)n, avg, max, (unsigned long)screen_s,
+               ble ? "actif" : "coupé", charging ? " — ATTENTION : batterie en charge, mesure faussée" : "");
     if (avg > 0) out.printf("autonomie estimée : %.1f h (%.0f mAh)\n", BATTERY_MAH / avg, BATTERY_MAH);
 }
 

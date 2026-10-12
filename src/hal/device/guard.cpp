@@ -13,6 +13,7 @@
 #include <esp_system.h>
 #include <soc/rtc_cntl_reg.h>
 #include <soc/rtc_wdt.h>
+#include <rom/rtc.h>
 
 static constexpr uint32_t MAGIC = 0x4B47524Bu; /* « KGRK » */
 static constexpr uint32_t RWDT_MS = 90000;     /* > sommeil léger max (60 s) avec marge pour l'oscillateur RC */
@@ -44,6 +45,10 @@ static void arm(void)
 void guard_init(void)
 {
     esp_reset_reason_t why = esp_reset_reason();
+    /* Le RWDT en mode RESET_RTC est rapporté « POWERON » par esp_reset_reason() : on lit la
+     * cause brute de la ROM pour le reconnaître. */
+    bool rwdt = rtc_get_reset_reason(0) == RTCWDT_RTC_RESET;
+    if (rwdt) why = ESP_RST_WDT;
     if (r_magic == MAGIC && why != ESP_RST_POWERON) {
         s_last_crumb = r_crumb;
         s_last_prev = r_prev;

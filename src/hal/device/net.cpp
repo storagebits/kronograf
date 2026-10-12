@@ -434,7 +434,10 @@ void net_workshop_loop(void)
         ArduinoOTA.onStart([] { Serial.println("event ota start"); });
         ArduinoOTA.onEnd([] { Serial.println("event ota end"); });
         /* Le transfert OTA tourne dans loop() : nourrir le chien de garde de la boucle. */
-        ArduinoOTA.onProgress([](unsigned int, unsigned int) { esp_task_wdt_reset(); });
+        ArduinoOTA.onProgress([](unsigned int, unsigned int) {
+            esp_task_wdt_reset();
+            guard_feed(); /* le transfert peut dépasser les 90 s du RWDT */
+        });
         ArduinoOTA.onError([](ota_error_t e) { Serial.printf("event ota error %d\n", e); });
         ArduinoOTA.begin();
         console_tcp_enable(true);
