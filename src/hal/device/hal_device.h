@@ -39,6 +39,7 @@ const char *power_wake_reason(void);
 void power_set_brightness(uint8_t level);
 void power_set_timeout(uint32_t ms);
 void power_force(bool on);
+void power_counters(uint32_t *wakes, uint32_t *light_sleeps);
 
 /* Réseau : synchro NTP en tâche de fond si secrets.h fournit un Wi-Fi */
 void net_start_time_sync(void);

@@ -6,7 +6,7 @@
  *   bl <n>      rétroéclairage 8..255
  *   timeout <s> délai d'extinction
  *   diag        affiche l'écran de diagnostic de la Tranche 0
- *   touch       affiche les points touchés pendant 10 s (calibration)
+ *   touch [s]   affiche les points touchés pendant s secondes (10 par défaut)
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
  *   log <n>     niveau de log ESP (0 = rien … 5 = verbeux)
  *   help
@@ -46,7 +46,10 @@ static void cmd_status(void)
                   (unsigned long)frame_px, (unsigned long)getCpuFrequencyMhz());
     Serial.printf("current batt_discharge=%.1fmA vbus=%.1fmA\n", pmu_discharge_ma(), pmu_vbus_ma());
     Serial.printf("battery=%d%% %dmV charging=%d usb=%d\n", b.percent, b.millivolts, b.charging, b.usb);
-    Serial.printf("screen=%s wake=%s steps=%lu\n", power_screen_on() ? "on" : "off", power_wake_reason(),
+    uint32_t wakes, sleeps;
+    power_counters(&wakes, &sleeps);
+    Serial.printf("screen=%s wake=%s wakes=%lu light_sleeps=%lu steps=%lu\n", power_screen_on() ? "on" : "off",
+                  power_wake_reason(), (unsigned long)wakes, (unsigned long)sleeps,
                   (unsigned long)hal_steps_today());
     struct tm t;
     hal_now(&t, nullptr);
@@ -54,7 +57,7 @@ static void cmd_status(void)
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, hal_time_valid(), net_status());
 }
 
-/* Format : "KGSHOT <w> <h> rgb565 swap=<0|1>", 1 ligne base64 par rangée, "KGSHOT END". */
+/* Format : "KGSHOT <w> <h> rgb565 swap=<0|1>", puis "R<y>:<base64>" par rangée, "KGSHOT END". */
 static void cmd_screenshot(void)
 {
     lv_obj_t *scr = lv_scr_act();
@@ -76,6 +79,7 @@ static void cmd_screenshot(void)
     for (int y = 0; y < h; y++) {
         size_t olen = 0;
         mbedtls_base64_encode(line, sizeof line, &olen, buf + y * w * 2, w * 2);
+        Serial.printf("R%d:", y); /* index de rangée : les lignes de log intercalées sont ignorées */
         Serial.write(line, olen);
         Serial.write('\n');
     }
@@ -91,8 +95,9 @@ static void run(char *cmd)
     else if (!strcmp(cmd, "wake")) power_force(true);
     else if (!strncmp(cmd, "bl ", 3)) power_set_brightness((uint8_t)atoi(cmd + 3));
     else if (!strncmp(cmd, "timeout ", 8)) power_set_timeout(1000u * atoi(cmd + 8));
-    else if (!strcmp(cmd, "touch")) {
-        uint32_t end = millis() + 10000;
+    else if (!strncmp(cmd, "touch", 5)) {
+        uint32_t secs = cmd[5] == ' ' ? atoi(cmd + 6) : 10;
+        uint32_t end = millis() + 1000 * secs;
         int16_t x, y;
         while (millis() < end) {
             lv_timer_handler(); /* fait tourner la lecture tactile */

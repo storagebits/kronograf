@@ -37,6 +37,10 @@ void loop()
 {
     console_poll();
     power_loop();
+    if (!power_screen_on()) { /* écran éteint : aucun rendu LVGL */
+        vTaskDelay(pdMS_TO_TICKS(50));
+        return;
+    }
     uint32_t wait = lv_timer_handler();
     vTaskDelay(pdMS_TO_TICKS(wait < 5 ? 1 : (wait > 20 ? 20 : wait)));
 }

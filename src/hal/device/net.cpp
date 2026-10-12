@@ -32,9 +32,13 @@ static void sync_task(void *)
         s_status = "synchro NTP";
         configTzTime(KG_TZ, "pool.ntp.org", "time.nrc.ca");
         t0 = millis();
-        while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && millis() - t0 < NTP_TIMEOUT_MS)
-            vTaskDelay(pdMS_TO_TICKS(100));
-        if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+        /* sntp_get_sync_status() remet l'état à zéro quand on le lit : une seule lecture par tour. */
+        bool synced = false;
+        while (!synced && millis() - t0 < NTP_TIMEOUT_MS) {
+            synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+            if (!synced) vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (synced) {
             rtc_from_system();
             s_last_sync = time(nullptr);
             s_status = "synchronisé";

@@ -26,16 +26,29 @@ def find_port():
 
 
 def open_port(path):
-    # dsrdtr/rtscts désactivés et lignes basses : ouvrir le port ne doit pas redémarrer l'ESP32.
+    # Sur macOS, ouvrir le port fait souvent redémarrer l'ESP32 (circuit d'auto-reset du CP210x).
+    # On écoute 1,5 s : si un démarrage est en cours, on attend « Kronograf prêt ».
     s = serial.Serial()
     s.port = path
     s.baudrate = 115200
-    s.timeout = 2
+    s.timeout = 0.3
     s.dtr = False
     s.rts = False
     s.open()
-    time.sleep(0.2)
+    end = time.time() + 1.5
+    booting = False
+    while time.time() < end:
+        line = s.readline().decode(errors="replace")
+        if "ets " in line or "Kronograf — démarrage" in line:
+            booting = True
+            end = time.time() + 15
+        if "Kronograf prêt" in line:
+            time.sleep(0.5)  # laisse passer les derniers logs de démarrage
+            break
+    if booting:
+        time.sleep(4)  # synchro NTP en cours au démarrage : ses logs Wi-Fi arrivent vers 4 s
     s.reset_input_buffer()
+    s.timeout = 2
     return s
 
 
@@ -73,19 +86,30 @@ def screenshot(s, path):
     if parts[1] == "ERR":
         sys.exit(f"Erreur montre : {line}")
     w, h, swap = int(parts[1]), int(parts[2]), parts[4] == "swap=1"
-    rows = []
+    rows = {}
     s.timeout = 5
     while True:
-        row = s.readline().decode(errors="replace").strip()
-        if row == "KGSHOT END":
+        line = s.readline().decode(errors="replace").strip()
+        if line == "KGSHOT END":
             break
-        if not row:
+        if not line:
             sys.exit(f"Capture interrompue après {len(rows)} rangées")
-        rows.append(base64.b64decode(row))
-    if len(rows) != h or any(len(r) != w * 2 for r in rows):
-        sys.exit(f"Capture incomplète : {len(rows)}/{h} rangées")
-    write_png(path, w, h, rgb565_to_rgb888(b"".join(rows), swap))
+        if not line.startswith("R") or ":" not in line:
+            continue  # ligne de log intercalée
+        idx, _, b64 = line[1:].partition(":")
+        try:
+            data = base64.b64decode(b64, validate=True)
+        except ValueError:
+            continue
+        if idx.isdigit() and len(data) == w * 2:
+            rows[int(idx)] = data
+    missing = [y for y in range(h) if y not in rows]
+    if missing:
+        print(f"capture incomplète : {len(missing)} rangées manquantes (première : {missing[0]})", file=sys.stderr)
+        return False
+    write_png(path, w, h, rgb565_to_rgb888(b"".join(rows[y] for y in range(h)), swap))
     print(f"capture {path} ({w}×{h})")
+    return True
 
 
 def command(s, cmd, wait=1.0):
@@ -106,7 +130,9 @@ def main():
     a = ap.parse_args()
     s = open_port(a.port or find_port())
     if a.cmd == "screenshot":
-        screenshot(s, a.args[0] if a.args else "screenshot.png")
+        # Un log d'une autre tâche peut s'intercaler au milieu d'une rangée : on recommence.
+        if not any(screenshot(s, a.args[0] if a.args else "screenshot.png") for _ in range(3)):
+            sys.exit("Capture impossible après 3 essais")
     else:
         command(s, " ".join([a.cmd] + a.args))
 

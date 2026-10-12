@@ -28,6 +28,7 @@ static uint32_t s_timeout_ms = 10000;
 static uint8_t s_brightness = 160;
 static uint32_t s_wake_ms;
 static const char *s_wake_reason = "démarrage";
+static uint32_t s_light_sleeps, s_wakes;
 
 static void IRAM_ATTR on_bma_irq() { s_bma_irq = true; }
 static void IRAM_ATTR on_axp_irq() { s_axp_irq = true; }
@@ -89,6 +90,7 @@ static void screen_off(void)
 {
     if (!s_screen_on) return;
     s_screen_on = false;
+    Serial.println("event sleep");
     for (int b = s_brightness; b > 0; b -= 16) { /* extinction douce, ~80 ms */
         hal_backlight(b);
         delay(8);
@@ -104,6 +106,8 @@ static void screen_on(const char *reason)
     lv_disp_trig_activity(nullptr);
     if (s_screen_on) return;
     s_screen_on = true;
+    s_wakes++;
+    Serial.printf("event wake %s\n", reason);
     setCpuFrequencyMhz(240);
     display_sleep(false);
     steps_midnight_check();
@@ -128,6 +132,7 @@ static const char *light_sleep(void)
     esp_sleep_enable_gpio_wakeup();
     esp_sleep_enable_timer_wakeup(60ULL * 1000 * 1000); /* minuit, VBUS : vérifié chaque minute */
     Serial.flush();
+    s_light_sleeps++;
     esp_light_sleep_start();
     gpio_wakeup_disable((gpio_num_t)PIN_AXP_INT);
     gpio_wakeup_disable((gpio_num_t)PIN_BMA_INT);
@@ -203,4 +208,10 @@ void power_force(bool on)
 {
     if (on) screen_on("console");
     else screen_off();
+}
+
+void power_counters(uint32_t *wakes, uint32_t *light_sleeps)
+{
+    *wakes = s_wakes;
+    *light_sleeps = s_light_sleeps;
 }
