@@ -12,3 +12,5 @@
 **Conséquence (règle 2) :** sauvegarde de la flash impossible → **aucune écriture sur la montre**. Le travail continue en simulateur (Tranche 0 : audit, chaîne de compilation, simulateur, captures) ; la vérification matérielle reprendra dès que le port apparaîtra.
 
 **Piste suivante :** câble USB data connu bon, branché directement sur le Mac (sans hub) ; vérifier avec `ls /dev/cu.*`.
+
+**Mise à jour 2026-10-12 :** après changement de câble, le port est apparu (`/dev/cu.usbserial-XXXX`, CP210x). `chip_id`/`flash_id` ont réussi : **ESP32-D0WDQ6 rev v1.0**, 40 MHz, flash Winbond (ef/4018) **16 Mo**. Puis le port a **disparu** pendant le `read_flash` à 921600 bauds et n'est pas revenu → connexion intermittente (fiche micro-USB mal enfoncée ou câble fragile). Aucune écriture effectuée ; aucune sauvegarde partielle conservée.
