@@ -130,6 +130,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_conn = BLE_HS_CONN_HANDLE_NONE;
         s_cp = nullptr;
         s_state = s_enabled ? KG_BLE_WAITING : KG_BLE_OFF;
+        xEventGroupClearBits(s_events, EV_SECURED); /* pas de chiffrement périmé pour la prochaine liaison */
         xEventGroupSetBits(s_events, EV_DISCONNECTED);
         d_reason = reason;
         Serial.printf("event ble déconnexion %d\n", reason);
@@ -152,9 +153,10 @@ class ServerCallbacks : public NimBLEServerCallbacks {
             NimBLEDevice::getServer()->disconnect(info.getConnHandle());
             return;
         }
+        d_secured++;
+        if (s_state == KG_BLE_READY) return; /* l'iPhone renouvelle le chiffrement d'une liaison prête */
         s_state = KG_BLE_CONNECTED;
         s_passkey = 0;
-        d_secured++;
         xEventGroupSetBits(s_events, EV_SECURED);
     }
 };

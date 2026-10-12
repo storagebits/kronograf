@@ -12,6 +12,7 @@
  *   ring <alarm|timer>  écran d'alerte + sonnerie (test)
  *   timer <s>   lance le minuteur (test des échéances)
  *   battsim <0|1>  simule la batterie sur USB (test du sommeil léger)
+ *   conso [min]    mesure du courant sur USB, batterie simulée et écran éteint
  *   beep        bip court (test du haut-parleur)
  *   egg         déclenche la décharge du cadran Circuits temporels
  *   coredump [erase]  résumé du dernier plantage (et effacement)
@@ -228,6 +229,11 @@ static void run(char *cmd)
     } else if (!strncmp(cmd, "battsim ", 8)) {
         power_battery_sim(atoi(cmd + 8));
         s_out->println("ok (console série seulement : le Wi-Fi va se couper)");
+    } else if (!strcmp(cmd, "conso")) {
+        power_measure_print(*s_out);
+    } else if (!strncmp(cmd, "conso ", 6)) {
+        power_measure_start(atoi(cmd + 6));
+        s_out->println("ok : Wi-Fi coupé pendant la mesure, console de retour à la fin");
     } else if (!strcmp(cmd, "meteo") || !strcmp(cmd, "meteo maj")) {
         if (cmd[5]) hal_weather_refresh(0);
         kg_weather_t wx;
@@ -293,7 +299,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | ble [on|off|oublier] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | conso [min] | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | ble [on|off|oublier] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 

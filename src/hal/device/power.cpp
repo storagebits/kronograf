@@ -346,9 +346,65 @@ void power_battery_sim(bool on) { s_batt_sim = on; }
 
 bool power_usb_stable(void) { return s_usb_stable && !s_batt_sim; }
 
+/* Mesure de consommation sans débrancher : batterie simulée (Wi-Fi coupé, écran éteint)
+ * pendant N minutes, en intégrant le courant VBUS. Batterie pleine et sans charge, le
+ * courant VBUS est la consommation de la montre. Le Wi-Fi atelier revient à la fin. */
+static uint32_t s_meas_start, s_meas_ms, s_meas_last, s_meas_n, s_meas_screen_ms, s_meas_charging;
+static double s_meas_sum;
+static float s_meas_max;
+static bool s_meas_ble;
+
+void power_measure_start(uint32_t minutes)
+{
+    s_meas_start = millis();
+    s_meas_ms = minutes * 60000u;
+    s_meas_last = 0;
+    s_meas_n = s_meas_screen_ms = s_meas_charging = 0;
+    s_meas_sum = s_meas_max = 0;
+    s_meas_ble = ble_active();
+    s_batt_sim = true;
+    screen_off();
+}
+
+static void measure_tick(void)
+{
+    if (!s_meas_ms) return;
+    uint32_t now = millis();
+    if (now - s_meas_start >= s_meas_ms) {
+        s_meas_ms = 0;
+        s_batt_sim = false;
+        return;
+    }
+    if (s_meas_last && now - s_meas_last < 1000) return;
+    if (now - s_meas_start < 5000) return; /* laisser le Wi-Fi se couper */
+    uint32_t dt = s_meas_last ? now - s_meas_last : 0;
+    s_meas_last = now;
+    if (s_screen_on) s_meas_screen_ms += dt;
+    if (hal_battery().charging) s_meas_charging++;
+    float ma = pmu_vbus_ma();
+    s_meas_sum += ma;
+    if (ma > s_meas_max) s_meas_max = ma;
+    s_meas_n++;
+}
+
+void power_measure_print(Print &out)
+{
+    if (!s_meas_n) {
+        out.println(s_meas_ms ? "conso : mesure en cours" : "conso : aucune mesure (conso <minutes>)");
+        return;
+    }
+    float avg = s_meas_sum / s_meas_n;
+    out.printf("conso : %s%lu échantillons, moyenne %.1f mA, pic %.1f mA, écran %lu s, BLE %s%s\n",
+               s_meas_ms ? "(en cours) " : "", (unsigned long)s_meas_n, avg, s_meas_max,
+               (unsigned long)(s_meas_screen_ms / 1000), s_meas_ble ? "actif" : "coupé",
+               s_meas_charging ? " — ATTENTION : batterie en charge, mesure faussée" : "");
+    if (avg > 0) out.printf("autonomie estimée : %.1f h (%.0f mAh)\n", BATTERY_MAH / avg, BATTERY_MAH);
+}
+
 void power_loop(void)
 {
     usb_debounce();
+    measure_tick();
     battlog_tick(s_usb_stable);
     const char *reason = poll_irqs();
     if (reason) screen_on(reason);

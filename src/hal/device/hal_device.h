@@ -74,6 +74,8 @@ const char *guard_report(char *buf, size_t n);
 /* USB stable (anti-rebond 3 s) : base des décisions Wi-Fi et sommeil léger. */
 bool power_usb_stable(void);
 void power_battery_sim(bool on);
+void power_measure_start(uint32_t minutes);
+void power_measure_print(Print &out);
 
 void console_poll(void);
 void console_tcp_enable(bool on);
