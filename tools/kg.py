@@ -9,6 +9,7 @@
 Le port est auto-détecté (premier /dev/cu.usbserial-* ou cu.wchusbserial*).
 """
 import argparse
+import socket
 import base64
 import glob
 import struct
@@ -169,7 +170,16 @@ def main():
     ap.add_argument("cmd")
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
-    s = open_tcp(a.host) if a.host else open_port(a.port or find_port())
+    host = a.host
+    if not host and not a.port:
+        # Ouvrir le port série redémarre la montre sur macOS (et efface le journal de
+        # batterie en mémoire) : la console TCP du mode atelier est préférée si elle répond.
+        try:
+            socket.create_connection(("kronograf.local", 2323), timeout=1.5).close()
+            host = "kronograf.local"
+        except OSError:
+            pass
+    s = open_tcp(host) if host else open_port(a.port or find_port())
     if a.cmd == "coredump-raw":
         coredump_raw(s, a.args[0] if a.args else "coredump.bin")
     elif a.cmd == "screenshot":
