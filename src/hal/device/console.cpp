@@ -3,6 +3,7 @@
  *   status      heap interne / PSRAM, FPS, batterie, uptime, révision
  *   screenshot  capture LVGL de l'écran courant, envoyée en base64 (tools/screenshot.py)
  *   diag        affiche l'écran de diagnostic de la Tranche 0
+ *   touch       affiche les points touchés pendant 10 s (calibration)
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
  *   log <n>     niveau de log ESP (0 = rien … 5 = verbeux)
  *   help
@@ -72,7 +73,16 @@ static void run(char *cmd)
 {
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
-    else if (!strcmp(cmd, "diag")) {
+    else if (!strcmp(cmd, "touch")) {
+        uint32_t end = millis() + 10000;
+        int16_t x, y;
+        while (millis() < end) {
+            lv_timer_handler(); /* fait tourner la lecture tactile */
+            if (touch_last(&x, &y)) Serial.printf("touch %d %d\n", x, y);
+            delay(50);
+        }
+        Serial.println("ok");
+    } else if (!strcmp(cmd, "diag")) {
         lv_scr_load(ui_diag_create());
         Serial.println("ok");
     } else if (!strcmp(cmd, "lcdtest")) {
@@ -82,7 +92,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         Serial.println("ok");
-    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | touch | diag | lcdtest | log <0-5> | help");
     else if (*cmd) Serial.printf("commande inconnue : %s\n", cmd);
 }
 

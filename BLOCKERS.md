@@ -16,3 +16,9 @@
 **Mise à jour 2026-10-12 :** après changement de câble, le port est apparu (`/dev/cu.usbserial-XXXX`, CP210x). `chip_id`/`flash_id` ont réussi : **ESP32-D0WDQ6 rev v1.0**, 40 MHz, flash Winbond (ef/4018) **16 Mo**. Puis le port a **disparu** pendant le `read_flash` à 921600 bauds et n'est pas revenu → connexion intermittente (fiche micro-USB mal enfoncée ou câble fragile). Aucune écriture effectuée ; aucune sauvegarde partielle conservée.
 
 **Résolu :** fiche réenfoncée ; sauvegarde complète réussie à 230 400 bauds (cf. DECISIONS D8).
+
+## B2 — Décrochages USB récurrents (ouvert, 2026-10-12)
+
+**Symptôme :** pendant un téléversement, le CP210x disparaît du bus USB ; les nœuds `/dev/cu.usbserial-XXXX` et `cu.SLAB_USBtoUART` restent mais toute ouverture échoue (`termios.error: (22, 'Invalid argument')`).
+**Cause probable :** même faux contact que B1 (fiche micro-USB de la montre).
+**Contournement :** travail sans montre (simulateur), flash groupé au retour du port ; l'utilisateur réenfonce la fiche. Piste durable : câble court, montre posée à plat, ou OTA Wi-Fi (Tranche 4) pour ne plus dépendre du câble.

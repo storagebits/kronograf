@@ -11,4 +11,7 @@ void display_init(void);
 float display_fps(void);
 void display_test_pattern(void);
 
+void touch_init(void);
+bool touch_last(int16_t *x, int16_t *y);
+
 void console_poll(void);

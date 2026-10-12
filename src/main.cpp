@@ -15,6 +15,7 @@ void setup()
     hal_device_init();
     lv_init();
     display_init();
+    touch_init();
 
     uint32_t t0 = millis();
     lv_scr_load(ui_face_aviator_create());
