@@ -78,3 +78,5 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D31. Réglages** : luminosité (curseur), mise en veille 5/10/15/30 s, cadran par défaut (appliqué au retour sur les cadrans), format 24 h (cadrans numériques), à propos. Tous persistants (NVS).
 
 **D32. Robustesse (cf. B3)** : restauration des interruptions GPIO après sommeil léger ; anti-rebond USB 3 s ; écritures TCP « tout ou rien » et chien de garde nourri pendant les commandes longues (une capture Wi-Fi dépassait les 8 s du chien de garde — vu au coredump) ; chien de garde RTC + miettes de pain RTC (efficacité limitée en sommeil léger, documentée en B3).
+
+**D33. Chien de garde RTC suspendu pendant le sommeil léger (cf. B3).** Le RWDT ne surveille plus que la montre éveillée ; il est coupé juste avant `esp_light_sleep_start()` et réarmé au réveil, avec l'action `RESET_RTC`. Le laisser compter pendant le sommeil bloquait la montre sur batterie au premier endormissement. Mode de test `battsim 1` (console) : simule la batterie montre branchée, pour observer le sommeil léger sur le câble série.
