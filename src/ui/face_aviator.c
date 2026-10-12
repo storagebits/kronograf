@@ -7,6 +7,8 @@
  * la zone balayée, jamais l'écran entier (SPI plafonné à 40 MHz, cf. DECISIONS D14).
  */
 #include "ui.h"
+#include "faces.h"
+#include "model.h"
 #include "theme.h"
 #include "fonts/kg_fonts.h"
 #include "../hal/hal.h"
@@ -48,6 +50,8 @@ static lv_obj_t *s_counterweight;
 static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint;
 static float s_bezel_deg;      /* rotation de la lunette */
 static lv_coord_t s_drag_last;
+static bool s_drag_on_bezel;   /* le geste en cours appartient à la lunette */
+static lv_timer_t *s_timer;
 static int s_last_mday = -1;
 
 /* ---------------------------------------------------------------- fond */
@@ -363,7 +367,8 @@ static void update(lv_timer_t *t)
     uint32_t steps = hal_steps_today();
     hand_set(&s_steps, 360.0f * (steps > STEPS_GOAL ? STEPS_GOAL : steps) / STEPS_GOAL);
 
-    hand_set(&s_chrono, 0); /* relié au chronomètre en Tranche 3 */
+    /* Compteur 30 minutes du chronomètre : un tour = 30 min. */
+    hand_set(&s_chrono, (model_chrono_elapsed_ms() % (30 * 60000)) * 360.0f / (30 * 60000));
 
     const char *hint = hal_time_hint();
     if (hint) {
@@ -388,12 +393,14 @@ static void bezel_drag(lv_event_t *e)
     lv_point_t p;
     lv_indev_get_point(indev, &p);
     float dx = p.x - CX, dy = p.y - CY;
-    if (dx * dx + dy * dy < (R_TRACK - 10) * (R_TRACK - 10)) return; /* centre : réservé au glissé de cadran */
     lv_coord_t ang = (lv_coord_t)lroundf(atan2f(dx, -dy) * 180.0f / PI_F);
     if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
+        /* Seul un appui commencé sur la lunette la fait tourner ; ailleurs, c'est un glissé de cadran. */
+        s_drag_on_bezel = dx * dx + dy * dy >= (R_TRACK - 10) * (R_TRACK - 10);
         s_drag_last = ang;
         return;
     }
+    if (!s_drag_on_bezel) return;
     int delta = ang - s_drag_last;
     if (delta > 180) delta -= 360;
     if (delta < -180) delta += 360;
@@ -404,7 +411,20 @@ static void bezel_drag(lv_event_t *e)
     lv_obj_invalidate(s_canvas);
 }
 
-lv_obj_t *ui_face_aviator_create(void)
+static bool swipe_ok(void) { return !s_drag_on_bezel; }
+
+static void set_active(bool on)
+{
+    if (on) {
+        s_last_mday = -1;
+        lv_timer_resume(s_timer);
+        update(NULL);
+    } else {
+        lv_timer_pause(s_timer);
+    }
+}
+
+static lv_obj_t *create(void)
 {
     s_scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(s_scr, KG_C_BG, 0);
@@ -468,7 +488,15 @@ lv_obj_t *ui_face_aviator_create(void)
     lv_obj_align(s_hint, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
 
+    s_timer = lv_timer_create(update, SWEEP_MS, NULL);
     update(NULL);
-    lv_timer_create(update, SWEEP_MS, NULL);
     return s_scr;
 }
+
+const kg_face_t kg_face_aviator = {
+    .name = "aviateur",
+    .create = create,
+    .set_active = set_active,
+    .swipe_ok = swipe_ok,
+    .brightness_pct = 100,
+};

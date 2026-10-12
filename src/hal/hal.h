@@ -60,6 +60,13 @@ uint32_t hal_steps_today(void);
 
 void hal_backlight(uint8_t level); /* 0..255 */
 
+/* Réglages persistants (NVS sur la montre). */
+int32_t hal_setting_get(const char *key, int32_t def);
+void hal_setting_set(const char *key, int32_t value);
+
+/* Facteur de luminosité demandé par le cadran affiché (100 = réglage utilisateur). */
+void hal_brightness_scale(uint8_t pct);
+
 /* Gros tampons (images de cadran) : PSRAM sur la montre, malloc en simulateur. */
 void *hal_alloc_large(size_t bytes);
 void hal_vibrate(uint16_t ms);

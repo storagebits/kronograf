@@ -42,6 +42,7 @@ void power_loop(void);
 bool power_screen_on(void);
 const char *power_wake_reason(void);
 void power_set_brightness(uint8_t level);
+uint8_t power_brightness(void);
 void power_set_timeout(uint32_t ms);
 void power_force(bool on);
 void power_counters(uint32_t *wakes, uint32_t *light_sleeps);

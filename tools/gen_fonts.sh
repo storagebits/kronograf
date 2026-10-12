@@ -20,3 +20,9 @@ gen_digits() { # poids taille nom
 npx -y lv_font_conv@1.5.2 --font assets/fonts/BarlowCondensed-SemiBold.ttf -r '0x20,0x25,0x2B-0x3A,0x41-0x5A,0x6B' \
   --size 11 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h -o src/ui/fonts/kg_font_digits_11.c
 gen_digits SemiBold 30 kg_font_digits_30
+# Pochoir des bandeaux (cadran Circuits temporels) : majuscules, chiffres, É.
+npx -y lv_font_conv@1.5.2 --font assets/fonts/AllertaStencil-Regular.ttf -r '0x20-0x5A,0xC8,0xC9' \
+  --size 11 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h -o src/ui/fonts/kg_font_stencil_11.c
+# Grands chiffres du cadran Nuit.
+npx -y lv_font_conv@1.5.2 --font assets/fonts/BarlowCondensed-Medium.ttf -r '0x30-0x3A' \
+  --size 104 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h -o src/ui/fonts/kg_font_night_104.c

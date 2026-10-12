@@ -36,5 +36,23 @@
 #define KG_C_DATE_BG     lv_color_hex(0xECE6D8)
 #define KG_C_DATE_FG     lv_color_hex(0x111111)
 
+/* Cadran « Circuits temporels » : afficheurs 7 segments */
+#define KG_C_SEG_RED     lv_color_hex(0xFF2E1F)   /* destination */
+#define KG_C_SEG_GREEN   lv_color_hex(0x32FF6E)   /* présent */
+#define KG_C_SEG_AMBER   lv_color_hex(0xFFA41C)   /* dernier départ */
+#define KG_SEG_OFF_MIX   18                       /* intensité des segments éteints (/255) */
+#define KG_C_BAND        lv_color_hex(0x9C978C)   /* bandeau métal brossé */
+#define KG_C_BAND_TEXT   lv_color_hex(0x15140F)
+#define KG_C_PANEL       lv_color_hex(0x060606)   /* fond des fenêtres d'afficheur */
+#define KG_C_PANEL_EDGE  lv_color_hex(0x2E2C28)
+
+/* Cadran « Nuit » */
+#define KG_C_NIGHT       lv_color_hex(0x9A140C)   /* rouge sombre, préserve la vision nocturne */
+#define KG_C_NIGHT_DIM   lv_color_hex(0x3A0806)
+#define KG_NIGHT_BRIGHTNESS_PCT 25
+
+/* Animations (Tranche 7 : harmonisées ici) */
+#define KG_ANIM_FACE_MS  280                      /* transition entre cadrans */
+
 /* Mise en page */
 #define KG_GUTTER 12

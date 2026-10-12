@@ -12,6 +12,7 @@
 #include <Wire.h>
 #define XPOWERS_CHIP_AXP202
 #include <XPowersLib.h>
+#include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <sys/time.h>
 
@@ -213,4 +214,22 @@ float pmu_discharged_mah(void)
     if (!s_inv.pmu) return 0;
     uint8_t rate = s_pmu.getAdcSamplingRate();
     return rate ? 65536.0f * 0.5f * s_pmu.getBattDischargeCoulomb() / 3600.0f / rate : 0;
+}
+
+/* Réglages en NVS, espace « kg ». Clés ≤ 15 caractères. */
+int32_t hal_setting_get(const char *key, int32_t def)
+{
+    Preferences p;
+    p.begin("kg", true);
+    int32_t v = p.getInt(key, def);
+    p.end();
+    return v;
+}
+
+void hal_setting_set(const char *key, int32_t value)
+{
+    Preferences p;
+    p.begin("kg", false);
+    if (p.getInt(key, value - 1) != value) p.putInt(key, value); /* évite d'user la flash */
+    p.end();
 }

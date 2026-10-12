@@ -24,7 +24,7 @@ void setup()
     lv_refr_now(nullptr);
     Serial.printf("cadran : rendu du fond %lu ms, première image %lu ms\n",
                   (unsigned long)(t1 - t0), (unsigned long)(millis() - t1));
-    power_set_brightness(160); /* allumé seulement une fois la première image envoyée : pas de flash blanc */
+    hal_brightness_scale(100); /* allume au réglage mémorisé, une fois la première image envoyée */
     net_start_time_sync();
 
     const kg_inventory_t *inv = hal_inventory();

@@ -7,6 +7,8 @@
  */
 #include "lvgl.h"
 #include "../src/ui/ui.h"
+#include "../src/ui/faces.h"
+#include "../src/hal/hal.h"
 #include "../src/ui/theme.h"
 #include <SDL.h>
 #include <stdio.h>
@@ -81,9 +83,29 @@ int main(int argc, char **argv)
 
     const char *screen = getenv("KG_SCREEN");
     int diag = screen && !strcmp(screen, "diag");
-    lv_scr_load(diag ? ui_diag_create() : ui_face_aviator_create());
+    if (diag) {
+        lv_scr_load(ui_diag_create());
+    } else {
+        const char *face = getenv("KG_FACE");
+        if (face) hal_setting_set("face", atoi(face));
+        ui_faces_start();
+    }
 
     if (shot) {
+        /* Laisse tourner les animations d'apparition (scintillement des segments) avant la capture. */
+        uint32_t until = SDL_GetTicks() + (getenv("KG_SETTLE_MS") ? atoi(getenv("KG_SETTLE_MS")) : 400);
+        while (SDL_GetTicks() < until) {
+            lv_timer_handler();
+            SDL_Delay(5);
+        }
+        if (getenv("KG_EGG")) {
+            face_circuits_discharge();
+            until = SDL_GetTicks() + atoi(getenv("KG_EGG"));
+            while (SDL_GetTicks() < until) {
+                lv_timer_handler();
+                SDL_Delay(2);
+            }
+        }
         lv_refr_now(NULL);
         int rc = write_png(shot);
         printf("%s %s\n", rc ? "ECHEC" : "capture", shot);

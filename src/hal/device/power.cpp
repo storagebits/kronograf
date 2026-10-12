@@ -26,6 +26,9 @@ static volatile bool s_bma_irq, s_axp_irq;
 static bool s_screen_on = true;
 static uint32_t s_timeout_ms = 10000;
 static uint8_t s_brightness = 160;
+static uint8_t s_scale_pct = 100; /* demandé par le cadran affiché */
+
+static uint8_t effective_brightness(void) { return (uint8_t)(s_brightness * s_scale_pct / 100 < 6 ? 6 : s_brightness * s_scale_pct / 100); }
 static uint32_t s_wake_ms;
 static const char *s_wake_reason = "démarrage";
 static uint32_t s_light_sleeps, s_wakes;
@@ -146,6 +149,7 @@ void power_init(void)
     attachInterrupt(PIN_AXP_INT, on_axp_irq, FALLING);
 
     steps_midnight_check();
+    s_brightness = (uint8_t)hal_setting_get("brightness", 160);
     s_wake_ms = millis();
 }
 
@@ -158,7 +162,7 @@ static void screen_off(void)
     if (s_screen_on_since) s_screen_ms_total += millis() - s_screen_on_since;
     s_screen_on_since = 0;
     Serial.println("event sleep");
-    for (int b = s_brightness; b > 0; b -= 16) { /* extinction douce, ~80 ms */
+    for (int b = effective_brightness(); b > 0; b -= 16) { /* extinction douce, ~80 ms */
         hal_backlight(b);
         delay(8);
     }
@@ -182,11 +186,11 @@ static void screen_on(const char *reason)
     lv_obj_invalidate(lv_scr_act());
     lv_timer_handler();               /* l'heure a sauté pendant la veille : redessiner avant d'éclairer */
     lv_refr_now(nullptr);
-    for (int b = 16; b < s_brightness; b += 24) {
+    for (int b = 16; b < effective_brightness(); b += 24) {
         hal_backlight(b);
         delay(6);
     }
-    hal_backlight(s_brightness);
+    hal_backlight(effective_brightness());
 }
 
 /* Sommeil léger jusqu'au prochain réveil matériel. Retourne la raison. */
@@ -268,7 +272,16 @@ const char *power_wake_reason(void) { return s_wake_reason; }
 void power_set_brightness(uint8_t level)
 {
     s_brightness = level < 8 ? 8 : level;
-    if (s_screen_on) hal_backlight(s_brightness);
+    hal_setting_set("brightness", s_brightness);
+    if (s_screen_on) hal_backlight(effective_brightness());
+}
+
+uint8_t power_brightness(void) { return s_brightness; }
+
+void hal_brightness_scale(uint8_t pct)
+{
+    s_scale_pct = pct > 100 ? 100 : pct;
+    if (s_screen_on) hal_backlight(effective_brightness());
 }
 
 void power_set_timeout(uint32_t ms) { s_timeout_ms = ms; }

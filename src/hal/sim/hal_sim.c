@@ -89,3 +89,26 @@ bool hal_time_valid(void) { return getenv("KG_NOTIME") == NULL; }
 time_t hal_last_sync(void) { return time(NULL) - 12 * 60; }
 
 const char *hal_time_hint(void) { return hal_time_valid() ? NULL : "Configurer dans secrets.h"; }
+
+/* Réglages : table en mémoire (le simulateur repart des valeurs par défaut). */
+static struct { char key[16]; int32_t value; } s_settings[16];
+
+int32_t hal_setting_get(const char *key, int32_t def)
+{
+    for (int i = 0; i < 16; i++)
+        if (!strcmp(s_settings[i].key, key)) return s_settings[i].value;
+    return def;
+}
+
+void hal_setting_set(const char *key, int32_t value)
+{
+    for (int i = 0; i < 16; i++) {
+        if (!s_settings[i].key[0] || !strcmp(s_settings[i].key, key)) {
+            snprintf(s_settings[i].key, sizeof s_settings[i].key, "%s", key);
+            s_settings[i].value = value;
+            return;
+        }
+    }
+}
+
+void hal_brightness_scale(uint8_t pct) { printf("[sim] luminosité %u %%\n", pct); }

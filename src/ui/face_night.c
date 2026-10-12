@@ -1,0 +1,59 @@
+/*
+ * Cadran 3 — « Nuit » : l'heure seule, en grands chiffres rouge sombre, rétroéclairage
+ * réduit. Une mise à jour par minute : le cadran le plus sobre en énergie.
+ * Choix justifié dans DECISIONS.md (D19).
+ */
+#include "faces.h"
+#include "theme.h"
+#include "fonts/kg_fonts.h"
+#include "../hal/hal.h"
+
+static lv_obj_t *s_time;
+static lv_timer_t *s_timer;
+static int s_last_min = -1;
+
+static void update(lv_timer_t *t)
+{
+    (void)t;
+    struct tm now;
+    hal_now(&now, NULL);
+    if (now.tm_min == s_last_min) return;
+    s_last_min = now.tm_min;
+    lv_label_set_text_fmt(s_time, "%02d:%02d", now.tm_hour, now.tm_min);
+}
+
+static void set_active(bool on)
+{
+    if (on) {
+        s_last_min = -1;
+        lv_timer_resume(s_timer);
+        update(NULL);
+    } else {
+        lv_timer_pause(s_timer);
+    }
+}
+
+static lv_obj_t *create(void)
+{
+    lv_obj_t *scr = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr, KG_C_BG, 0);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_time = lv_label_create(scr);
+    lv_obj_set_style_text_font(s_time, &kg_font_night_104, 0);
+    lv_obj_set_style_text_color(s_time, KG_C_NIGHT, 0);
+    lv_obj_set_style_text_letter_space(s_time, -2, 0);
+    lv_label_set_text(s_time, "00:00");
+    lv_obj_center(s_time);
+
+    s_timer = lv_timer_create(update, 1000, NULL);
+    update(NULL);
+    return scr;
+}
+
+const kg_face_t kg_face_night = {
+    .name = "nuit",
+    .create = create,
+    .set_active = set_active,
+    .brightness_pct = KG_NIGHT_BRIGHTNESS_PCT,
+};
