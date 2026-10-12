@@ -85,3 +85,4 @@ void net_workshop_loop(void);
 void ble_start(void);
 bool ble_active(void);     /* contrôleur allumé : pas de sommeil léger (pas de quartz 32 kHz) */
 bool ble_take_wake(void);  /* une notification ou un appairage demande l'écran */
+void ble_diag(Print &out); /* compteurs ANCS pour la console */

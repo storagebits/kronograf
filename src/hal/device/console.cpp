@@ -258,6 +258,7 @@ static void run(char *cmd)
         s_out->printf("ble : %s%s, %d notifications, tas interne libre %lu\n", ST[hal_ble_state()],
                       guard_safe_mode() ? " (mode sans échec)" : "", hal_notif_count(),
                       (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        ble_diag(*s_out);
         for (int i = 0; i < hal_notif_count(); i++) {
             kg_notif_t n;
             if (hal_notif_get(i, &n)) s_out->printf("  [%u] %s — %s\n", n.category, n.app, n.title);

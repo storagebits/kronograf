@@ -41,6 +41,22 @@ static kg_ancs_rx_t s_rx;
 static kg_notif_t s_last_rx; /* réponse décodée par le rappel Data Source */
 static NimBLERemoteCharacteristic *s_cp;
 
+/* Diagnostic (console « ble ») : compteurs et dernière étape en échec. */
+static volatile uint32_t d_events, d_requests, d_responses, d_timeouts, d_wfail, d_frames;
+static const char *volatile d_last = "";
+static volatile uint32_t d_rx_raw; /* notifications reçues au niveau GAP, avant tout routage */
+static volatile uint16_t d_rx_handle, d_ns_handle, d_ds_handle;
+static ble_gap_event_listener s_listener;
+
+static int gap_listener(struct ble_gap_event *ev, void *)
+{
+    if (ev->type == BLE_GAP_EVENT_NOTIFY_RX) {
+        d_rx_raw++;
+        d_rx_handle = ev->notify_rx.attr_handle;
+    }
+    return 0;
+}
+
 /* -------------------------------------------------------------- liste */
 
 static void list_remove(uint32_t uid)
@@ -72,7 +88,11 @@ static void list_put(const kg_notif_t &n)
 static void on_notif_source(NimBLERemoteCharacteristic *, uint8_t *data, size_t len, bool)
 {
     kg_ancs_event_t ev;
-    if (!kg_ancs_parse_event(data, len, &ev)) return;
+    d_events++;
+    if (!kg_ancs_parse_event(data, len, &ev)) {
+        d_last = "événement illisible";
+        return;
+    }
     if (ev.event == KG_ANCS_REMOVED) {
         list_remove(ev.uid);
         return;
@@ -87,6 +107,7 @@ static void on_notif_source(NimBLERemoteCharacteristic *, uint8_t *data, size_t 
 
 static void on_data_source(NimBLERemoteCharacteristic *, uint8_t *data, size_t len, bool)
 {
+    d_frames++;
     if (kg_ancs_rx_feed(&s_rx, data, len, &s_last_rx)) xEventGroupSetBits(s_events, EV_RESPONSE);
 }
 
@@ -138,7 +159,10 @@ static bool ancs_attach(void)
 {
     NimBLEConnInfo info = s_server->getPeerInfoByHandle(s_conn);
     NimBLEClient *client = s_server->getClient(info);
-    if (!client) return false;
+    if (!client) {
+        d_last = "pas de client GATT";
+        return false;
+    }
     NimBLERemoteService *svc = client->getService(KG_ANCS_SERVICE);
     if (!svc) {
         Serial.println("event ble pas d'ANCS (pas un iPhone ?)");
@@ -147,9 +171,21 @@ static bool ancs_attach(void)
     NimBLERemoteCharacteristic *ns = svc->getCharacteristic(KG_ANCS_NOTIF_SOURCE);
     NimBLERemoteCharacteristic *ds = svc->getCharacteristic(KG_ANCS_DATA_SOURCE);
     s_cp = svc->getCharacteristic(KG_ANCS_CONTROL_POINT);
-    if (!ns || !ds || !s_cp) return false;
+    if (!ns || !ds || !s_cp) {
+        d_last = "caractéristiques ANCS absentes";
+        return false;
+    }
     /* Data Source d'abord : les réponses ne doivent pas arriver avant l'abonnement. */
-    if (!ds->subscribe(true, on_data_source) || !ns->subscribe(true, on_notif_source)) return false;
+    d_ns_handle = ns->getHandle();
+    d_ds_handle = ds->getHandle();
+    if (!ds->subscribe(true, on_data_source)) {
+        d_last = "abonnement Data Source refusé";
+        return false;
+    }
+    if (!ns->subscribe(true, on_notif_source)) {
+        d_last = "abonnement Notification Source refusé";
+        return false;
+    }
     /* Intervalle de connexion économe, dans les bornes acceptées par iOS :
      * 300–330 ms, latence 4 (≤ 2 s entre échanges), délai de supervision 6 s. */
     client->updateConnParams(240, 264, 4, 600);
@@ -172,9 +208,23 @@ static void fetch(uint64_t item)
     size_t n = kg_ancs_build_request(req, sizeof req, uid);
     kg_ancs_rx_reset(&s_rx);
     xEventGroupClearBits(s_events, EV_RESPONSE);
-    if (!s_cp || !s_cp->writeValue(req, n, true)) return;
+    d_requests++;
+    if (!s_cp || !s_cp->writeValue(req, n, true)) {
+        d_wfail++;
+        d_last = "requête Control Point refusée";
+        return;
+    }
     EventBits_t bits = xEventGroupWaitBits(s_events, EV_RESPONSE | EV_DISCONNECTED, pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
-    if (!(bits & EV_RESPONSE) || s_last_rx.uid != uid) return;
+    if (!(bits & EV_RESPONSE)) {
+        d_timeouts++;
+        d_last = s_rx.len ? "réponse incomplète" : "pas de réponse Data Source";
+        return;
+    }
+    if (s_last_rx.uid != uid) {
+        d_last = "réponse d'une autre notification";
+        return;
+    }
+    d_responses++;
     kg_notif_t note = s_last_rx;
     note.category = category;
     list_put(note);
@@ -215,6 +265,7 @@ static void ble_up(void)
     s_server->setCallbacks(new ServerCallbacks());
     s_server->advertiseOnDisconnect(true);
     s_server->start();
+    ble_gap_event_listener_register(&s_listener, gap_listener, nullptr);
 
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     NimBLEAdvertisementData data;
@@ -304,6 +355,15 @@ bool hal_notif_get(int i, kg_notif_t *out)
 }
 
 uint32_t hal_notif_seq(void) { return s_seq; }
+
+void ble_diag(Print &out)
+{
+    out.printf("gap : %lu notifications reçues (dernière poignée %u ; NS %u, DS %u)\n", (unsigned long)d_rx_raw,
+               d_rx_handle, d_ns_handle, d_ds_handle);
+    out.printf("ancs : %lu événements, %lu requêtes, %lu réponses (%lu trames), %lu sans réponse, %lu écritures refusées%s%s\n",
+               (unsigned long)d_events, (unsigned long)d_requests, (unsigned long)d_responses, (unsigned long)d_frames,
+               (unsigned long)d_timeouts, (unsigned long)d_wfail, *d_last ? " ; dernier échec : " : "", d_last);
+}
 
 void hal_notif_dismiss(uint32_t uid)
 {
