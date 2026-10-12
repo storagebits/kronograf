@@ -1,5 +1,6 @@
 /* Fonctions propres à la cible montre (non vues par l'UI). */
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 class Print;
 
@@ -30,6 +31,10 @@ uint32_t pmu_read_irq(void);
 float pmu_discharge_ma(void);
 float pmu_vbus_ma(void);
 float pmu_discharged_mah(void);
+void pmu_audio_power(bool on);
+
+/* Vibreur et sons */
+void feedback_init(void);
 
 /* Journal d'autonomie (sur batterie) */
 void battlog_print(Print &out);
@@ -51,6 +56,20 @@ void power_counters(uint32_t *wakes, uint32_t *light_sleeps);
 /* Réseau : synchro NTP en tâche de fond si secrets.h fournit un Wi-Fi */
 void net_start_time_sync(void);
 const char *net_status(void);
+
+/* Garde-fous (guard.cpp) : chien de garde RTC et miettes de pain en mémoire RTC. */
+enum {
+    KG_CRUMB_NONE, KG_CRUMB_LOOP, KG_CRUMB_LVGL, KG_CRUMB_CONSOLE, KG_CRUMB_POWER, KG_CRUMB_PRE_SLEEP,
+    KG_CRUMB_POST_SLEEP, KG_CRUMB_SCREEN_OFF, KG_CRUMB_SCREEN_ON, KG_CRUMB_WORKSHOP_ON, KG_CRUMB_WORKSHOP_OFF,
+    KG_CRUMB_NET,
+};
+void guard_init(void);
+void guard_feed(void);
+void guard_crumb(uint32_t id);
+const char *guard_report(char *buf, size_t n);
+
+/* USB stable (anti-rebond 3 s) : base des décisions Wi-Fi et sommeil léger. */
+bool power_usb_stable(void);
 
 void console_poll(void);
 void console_tcp_enable(bool on);

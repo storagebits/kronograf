@@ -26,3 +26,6 @@ npx -y lv_font_conv@1.5.2 --font assets/fonts/AllertaStencil-Regular.ttf -r '0x2
 # Grands chiffres du cadran Nuit.
 npx -y lv_font_conv@1.5.2 --font assets/fonts/BarlowCondensed-Medium.ttf -r '0x30-0x3A' \
   --size 104 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h -o src/ui/fonts/kg_font_night_104.c
+# Chiffres moyens des apps (chronomètre, minuteur, alarmes, pas).
+npx -y lv_font_conv@1.5.2 --font assets/fonts/BarlowCondensed-SemiBold.ttf -r '0x20,0x2C-0x3A' \
+  --size 56 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h -o src/ui/fonts/kg_font_digits_56.c

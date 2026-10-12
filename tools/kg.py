@@ -106,7 +106,8 @@ def screenshot(s, path):
         if line == "KGSHOT END":
             break
         if not line:
-            sys.exit(f"Capture interrompue après {len(rows)} rangées")
+            print(f"capture interrompue après {len(rows)} rangées", file=sys.stderr)
+            return False
         if not line.startswith("R") or ":" not in line:
             continue  # ligne de log intercalée
         idx, _, b64 = line[1:].partition(":")

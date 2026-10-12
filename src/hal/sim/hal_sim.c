@@ -75,6 +75,30 @@ void hal_backlight(uint8_t level) { (void)level; }
 
 void hal_vibrate(uint16_t ms) { printf("[sim] vibreur %u ms\n", ms); }
 
+void hal_vibrate_pattern(const uint16_t *ms, uint8_t n)
+{
+    printf("[sim] vibreur motif :");
+    for (int i = 0; i < n; i++) printf(" %u", ms[i]);
+    printf("\n");
+}
+
+void hal_tones(const kg_tone_t *t, uint8_t n)
+{
+    printf("[sim] sons :");
+    for (int i = 0; i < n; i++) printf(" %uHz/%ums", t[i].hz, t[i].ms);
+    printf("\n");
+}
+
+bool hal_sound_available(void) { return true; }
+
+void hal_schedule_wakeup(time_t when) { (void)when; }
+
+void hal_steps_history(uint32_t out[7])
+{
+    static const uint32_t demo[7] = {8240, 11320, 5410, 9870, 3020, 12150, 7600};
+    for (int i = 0; i < 7; i++) out[i] = demo[i];
+}
+
 /* Remplie de motif : la PSRAM de la montre n'est pas initialisée, le simulateur ne doit pas
  * masquer un oubli de remplissage par une mémoire fraîchement mise à zéro. */
 void *hal_alloc_large(size_t bytes)
@@ -112,3 +136,31 @@ void hal_setting_set(const char *key, int32_t value)
 }
 
 void hal_brightness_scale(uint8_t pct) { printf("[sim] luminosité %u %%\n", pct); }
+
+static uint8_t s_bl = 160;
+static uint16_t s_timeout = 10;
+static char s_ssid[33] = "Maison";
+uint8_t hal_brightness_get(void) { return s_bl; }
+void hal_brightness_set(uint8_t level) { s_bl = level; }
+uint16_t hal_screen_timeout_get(void) { return s_timeout; }
+void hal_screen_timeout_set(uint16_t seconds) { s_timeout = seconds; }
+
+static int s_scan = -2;
+void hal_wifi_scan_start(void) { s_scan = 4; }
+int hal_wifi_scan_count(void) { return s_scan < 0 ? -1 : s_scan; }
+bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi)
+{
+    static const char *const names[] = {"Maison", "Maison-5G", "Café du coin", "BELL123"};
+    static const int levels[] = {-48, -55, -71, -83};
+    if (i < 0 || i >= 4) return false;
+    snprintf(ssid, n, "%s", names[i]);
+    *rssi = levels[i];
+    return true;
+}
+void hal_wifi_set_credentials(const char *ssid, const char *pass)
+{
+    (void)pass;
+    snprintf(s_ssid, sizeof s_ssid, "%s", ssid);
+}
+const char *hal_wifi_ssid(void) { return s_ssid; }
+const char *hal_net_status(void) { return "synchronisé"; }

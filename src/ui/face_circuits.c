@@ -125,7 +125,7 @@ static void show(row_t *r, const struct tm *t)
     seg7_set_text(r->day, buf);
     snprintf(buf, sizeof buf, "%02d", t->tm_mon + 1);
     seg7_set_text(r->month, buf);
-    snprintf(buf, sizeof buf, "%02d%02d", t->tm_hour, t->tm_min);
+    snprintf(buf, sizeof buf, "%02d%02d", ui_display_hour(t->tm_hour), t->tm_min);
     seg7_set_text(r->time, buf);
 }
 

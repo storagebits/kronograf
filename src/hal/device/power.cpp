@@ -20,6 +20,7 @@
 #define XPOWERS_CHIP_AXP202
 #include <XPowersLib.h>
 #include <SensorBMA423.hpp>
+#include "../../ui/model.h"
 
 static SensorBMA423 s_bma;
 static bool s_bma_ok;
@@ -33,6 +34,12 @@ static uint8_t effective_brightness(void) { return (uint8_t)(s_brightness * s_sc
 static uint32_t s_wake_ms;
 static const char *s_wake_reason = "démarrage";
 static uint32_t s_light_sleeps, s_wakes;
+static volatile time_t s_wake_at; /* réveil programmé (alarme, minuteur) */
+static bool s_usb_stable = true;
+static bool s_usb_raw_last = true;
+static uint32_t s_usb_change_ms;
+
+void hal_schedule_wakeup(time_t when) { s_wake_at = when; }
 
 /* ------------------------------------------------------ journal d'autonomie
  * Démarre au débranchement de l'USB, un échantillon par minute (RAM : perdu au
@@ -124,10 +131,46 @@ static void steps_midnight_check(void)
     int day = (t.tm_year + 1900) * 1000 + t.tm_yday;
     Preferences p;
     p.begin("kg", false);
-    if (p.getInt("steps_day", 0) != day) {
+    int last = p.getInt("steps_day", 0);
+    if (last != day) {
+        /* Historique glissant : st0 = hier … st6 = il y a 7 jours. Le compte courant appartient
+         * au jour « last » ; s'il y a plus d'un jour d'écart, les jours manqués valent 0. */
+        uint32_t hist[7];
+        for (int i = 0; i < 7; i++) hist[i] = p.getUInt(("st" + String(i)).c_str(), 0);
+        int gap = last ? 1 : 0; /* premier démarrage : pas d'historique à décaler */
+        if (last) {
+            struct tm lt = {};
+            lt.tm_year = last / 1000 - 1900;
+            lt.tm_mday = last % 1000 + 1; /* tm_yday → jour du mois 1 de janvier + yday */
+            lt.tm_isdst = -1;
+            time_t a = mktime(&lt);
+            struct tm nt = {};
+            nt.tm_year = t.tm_year;
+            nt.tm_mday = t.tm_yday + 1;
+            nt.tm_isdst = -1;
+            time_t b = mktime(&nt);
+            gap = (int)((b - a + 43200) / 86400);
+            if (gap < 1) gap = 1;
+        }
+        /* Après `gap` décalages, le compte du jour « last » est au rang gap-1, précédé de
+         * zéros pour les jours où la montre n'a pas tourné. */
+        for (int k = 0; k < gap && k < 7; k++) {
+            memmove(&hist[1], &hist[0], 6 * sizeof hist[0]);
+            hist[0] = k == 0 ? s_bma.getPedometerCounter() : 0;
+        }
+        if (gap)
+            for (int i = 0; i < 7; i++) p.putUInt(("st" + String(i)).c_str(), hist[i]);
         s_bma.resetPedometer();
         p.putInt("steps_day", day);
     }
+    p.end();
+}
+
+void hal_steps_history(uint32_t out[7])
+{
+    Preferences p;
+    p.begin("kg", true);
+    for (int i = 0; i < 7; i++) out[i] = p.getUInt(("st" + String(i)).c_str(), 0);
     p.end();
 }
 
@@ -155,12 +198,14 @@ void power_init(void)
         log_e("BMA423 : initialisation impossible");
     }
 
+    s_usb_stable = s_usb_raw_last = hal_battery().usb;
     pmu_enable_button_irq();
     pinMode(PIN_AXP_INT, INPUT);
     attachInterrupt(PIN_AXP_INT, on_axp_irq, FALLING);
 
     steps_midnight_check();
     s_brightness = (uint8_t)hal_setting_get("brightness", 160);
+    s_timeout_ms = 1000u * hal_setting_get("timeout", 10);
     s_wake_ms = millis();
 }
 
@@ -170,6 +215,7 @@ static void screen_off(void)
 {
     if (!s_screen_on) return;
     s_screen_on = false;
+    guard_crumb(KG_CRUMB_SCREEN_OFF);
     if (s_screen_on_since) s_screen_ms_total += millis() - s_screen_on_since;
     s_screen_on_since = 0;
     Serial.println("event sleep");
@@ -188,6 +234,7 @@ static void screen_on(const char *reason)
     lv_disp_trig_activity(nullptr);
     if (s_screen_on) return;
     s_screen_on = true;
+    guard_crumb(KG_CRUMB_SCREEN_ON);
     s_screen_on_since = millis();
     s_wakes++;
     Serial.printf("event wake %s\n", reason);
@@ -213,12 +260,27 @@ static const char *light_sleep(void)
     gpio_wakeup_enable((gpio_num_t)PIN_AXP_INT, GPIO_INTR_LOW_LEVEL);
     gpio_wakeup_enable((gpio_num_t)PIN_BMA_INT, GPIO_INTR_HIGH_LEVEL);
     esp_sleep_enable_gpio_wakeup();
-    esp_sleep_enable_timer_wakeup(60ULL * 1000 * 1000); /* minuit, VBUS : vérifié chaque minute */
+    /* Réveil minuté : au plus tard dans 60 s (minuit, VBUS, journal), plus tôt si une
+     * alarme ou un minuteur tombe avant. */
+    uint64_t us = 60ULL * 1000 * 1000;
+    time_t now = time(nullptr);
+    if (s_wake_at > now && (uint64_t)(s_wake_at - now) * 1000000ULL < us) us = (uint64_t)(s_wake_at - now) * 1000000ULL;
+    else if (s_wake_at && s_wake_at <= now) us = 1000;
+    esp_sleep_enable_timer_wakeup(us);
     Serial.flush();
     s_light_sleeps++;
+    guard_feed();
+    guard_crumb(KG_CRUMB_PRE_SLEEP);
     esp_light_sleep_start();
+    guard_feed();
+    guard_crumb(KG_CRUMB_POST_SLEEP);
+    /* gpio_wakeup_disable() remet le type d'interruption à « aucune » : sans cette
+     * restauration, après un premier sommeil léger le bouton et le poignet ne réveillent
+     * plus rien tant que la montre reste éveillée (ex. branchée en USB). */
     gpio_wakeup_disable((gpio_num_t)PIN_AXP_INT);
     gpio_wakeup_disable((gpio_num_t)PIN_BMA_INT);
+    gpio_set_intr_type((gpio_num_t)PIN_AXP_INT, GPIO_INTR_NEGEDGE);
+    gpio_set_intr_type((gpio_num_t)PIN_BMA_INT, GPIO_INTR_POSEDGE);
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) return nullptr;
     if (digitalRead(PIN_AXP_INT) == LOW) s_axp_irq = true;
     if (digitalRead(PIN_BMA_INT) == HIGH) s_bma_irq = true;
@@ -251,11 +313,35 @@ static const char *poll_irqs(void)
     return reason;
 }
 
+/* USB « stable » : il faut 3 s d'état constant pour basculer. Le connecteur de la montre
+ * fait des micro-coupures ; sans anti-rebond, le Wi-Fi atelier s'allumait/s'éteignait en
+ * boucle et la montre entrait en sommeil léger entre deux. */
+
+static void usb_debounce(void)
+{
+    bool raw = hal_battery().usb;
+    if (raw != s_usb_raw_last) {
+        s_usb_raw_last = raw;
+        s_usb_change_ms = millis();
+    }
+    if (raw != s_usb_stable && millis() - s_usb_change_ms >= 3000) s_usb_stable = raw;
+}
+
+bool power_usb_stable(void) { return s_usb_stable; }
+
 void power_loop(void)
 {
-    battlog_tick(hal_battery().usb);
+    usb_debounce();
+    battlog_tick(s_usb_stable);
     const char *reason = poll_irqs();
     if (reason) screen_on(reason);
+    /* Échéance d'une alarme ou d'un minuteur : l'UI (qui ne tourne pas écran éteint)
+     * doit reprendre la main pour sonner. On interroge le modèle directement : un
+     * minuteur lancé écran éteint (ou juste avant l'extinction) doit aussi réveiller. */
+    if (!s_screen_on) {
+        s_wake_at = model_next_event_time();
+        if (s_wake_at && time(nullptr) >= s_wake_at) screen_on("échéance");
+    }
 
     if (s_screen_on && lv_disp_get_inactive_time(nullptr) > s_timeout_ms &&
         millis() - s_wake_ms > s_timeout_ms) {
@@ -263,7 +349,7 @@ void power_loop(void)
     }
 
     if (!s_screen_on) {
-        if (hal_battery().usb || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger Wi-Fi allumé */
+        if (s_usb_stable || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger sur USB ni Wi-Fi allumé */
             set_cpu_mhz(80);
         } else {
             const char *r = light_sleep();
@@ -307,4 +393,14 @@ void power_counters(uint32_t *wakes, uint32_t *light_sleeps)
 {
     *wakes = s_wakes;
     *light_sleeps = s_light_sleeps;
+}
+
+uint8_t hal_brightness_get(void) { return s_brightness; }
+void hal_brightness_set(uint8_t level) { power_set_brightness(level); }
+uint16_t hal_screen_timeout_get(void) { return (uint16_t)(s_timeout_ms / 1000); }
+
+void hal_screen_timeout_set(uint16_t seconds)
+{
+    s_timeout_ms = 1000u * seconds;
+    hal_setting_set("timeout", seconds);
 }

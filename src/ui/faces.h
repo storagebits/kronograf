@@ -28,6 +28,21 @@ int ui_faces_count(void);
 int ui_faces_current(void);
 const char *ui_faces_name(int n);
 
+/* Format horaire (réglage « fmt24 », 24 h par défaut). Heure à afficher pour h ∈ 0..23. */
+bool ui_fmt24(void);
+void ui_set_fmt24(bool on);
+int ui_display_hour(int h24);
+
+/* Cadran par défaut : mémorisé et affiché tout de suite. */
+void ui_faces_set_default(int n);
+
+/* Écran du cadran n (créé au besoin). */
+lv_obj_t *ui_faces_screen(int n);
+
+/* Cadran courant caché (lanceur, app) : ses minuteurs sont en pause ; visible : relancés. */
+void ui_faces_set_visible(bool visible);
+#define ui_faces_refresh_current() ui_faces_set_visible(true)
+
 #ifdef __cplusplus
 }
 #endif

@@ -8,6 +8,8 @@
 #include "lvgl.h"
 #include "../src/ui/ui.h"
 #include "../src/ui/faces.h"
+#include "../src/ui/nav.h"
+#include "../src/ui/model.h"
 #include "../src/hal/hal.h"
 #include "../src/ui/theme.h"
 #include <SDL.h>
@@ -89,13 +91,33 @@ int main(int argc, char **argv)
         const char *face = getenv("KG_FACE");
         if (face) hal_setting_set("face", atoi(face));
         ui_faces_start();
+        ui_nav_init();
+        if (getenv("KG_DEMO")) {
+            kg_alarm_t a = {true, 6, 45}, b = {true, 7, 30};
+            model_alarm_set(0, a);
+            model_alarm_set(2, b);
+            model_timer_set(12 * 60000);
+            model_timer_start_pause();
+            model_chrono_start_stop();
+        }
+        const char *app = getenv("KG_APP");
+        if (app && !strcmp(app, "launcher")) ui_nav_open_launcher();
+        else if (app) ui_nav_open_app(app);
+        if (getenv("KG_ALERT")) ui_nav_test_alert(!strcmp(getenv("KG_ALERT"), "alarm"));
     }
 
     if (shot) {
         /* Laisse tourner les animations d'apparition (scintillement des segments) avant la capture. */
         uint32_t until = SDL_GetTicks() + (getenv("KG_SETTLE_MS") ? atoi(getenv("KG_SETTLE_MS")) : 400);
+        uint32_t t0 = SDL_GetTicks();
+        int laps = 0;
         while (SDL_GetTicks() < until) {
             lv_timer_handler();
+            /* Démo : deux tours de chrono pendant l'attente. */
+            if (getenv("KG_DEMO") && laps < 2 && SDL_GetTicks() - t0 > 300u + 500u * laps) {
+                model_chrono_lap();
+                laps++;
+            }
             SDL_Delay(5);
         }
         if (getenv("KG_EGG")) {

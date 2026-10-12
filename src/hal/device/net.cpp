@@ -8,6 +8,7 @@
 #include "kg_secrets.h"
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include <esp_task_wdt.h>
@@ -17,6 +18,26 @@
 #endif
 
 static volatile time_t s_last_sync;
+
+/* Identifiants : ceux saisis sur la montre (NVS « kgnet ») priment sur secrets.h. */
+static char s_ssid[33], s_pass[65];
+
+static void load_credentials(void)
+{
+    Preferences p;
+    p.begin("kgnet", true);
+    String ssid = p.getString("ssid", ""), pass = p.getString("pass", "");
+    p.end();
+    if (ssid.length()) {
+        snprintf(s_ssid, sizeof s_ssid, "%s", ssid.c_str());
+        snprintf(s_pass, sizeof s_pass, "%s", pass.c_str());
+    } else {
+        snprintf(s_ssid, sizeof s_ssid, "%s", KG_WIFI_SSID);
+        snprintf(s_pass, sizeof s_pass, "%s", KG_WIFI_PASS);
+    }
+}
+
+static bool have_wifi(void) { return s_ssid[0] != 0; }
 static const char *volatile s_status = "inactif";
 static TaskHandle_t s_task;
 
@@ -28,7 +49,7 @@ static void sync_task(void *)
     s_status = "connexion Wi-Fi";
     WiFi.persistent(false); /* ne pas écrire les identifiants en NVS */
     WiFi.mode(WIFI_STA);
-    WiFi.begin(KG_WIFI_SSID, KG_WIFI_PASS);
+    WiFi.begin(s_ssid, s_pass);
     uint32_t t0 = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t0 < WIFI_TIMEOUT_MS) vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -56,7 +77,7 @@ static void sync_task(void *)
     }
     /* Sur USB, le mode atelier reprend la connexion telle quelle : pas de coupure qui
      * ferait sauter une console TCP fraîchement ouverte. */
-    if (!(KG_WORKSHOP && hal_battery().usb && WiFi.status() == WL_CONNECTED)) {
+    if (!(KG_WORKSHOP && power_usb_stable() && WiFi.status() == WL_CONNECTED)) {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
     }
@@ -66,7 +87,8 @@ static void sync_task(void *)
 
 void net_start_time_sync(void)
 {
-    if (!KG_HAS_WIFI) {
+    load_credentials();
+    if (!have_wifi()) {
         s_status = "pas de Wi-Fi dans secrets.h";
         return;
     }
@@ -82,7 +104,7 @@ time_t hal_last_sync(void) { return s_last_sync; }
 const char *hal_time_hint(void)
 {
     if (hal_time_valid()) return nullptr;
-    return KG_HAS_WIFI ? "Synchro de l'heure…" : "Configurer dans secrets.h";
+    return have_wifi() ? "Synchro de l'heure…" : "Configurer le Wi-Fi (Réglages)";
 }
 
 /* ------------------------------------------------------------ mode atelier
@@ -94,6 +116,7 @@ const char *hal_time_hint(void)
 #endif
 
 static bool s_workshop, s_ota_ready;
+static bool s_scanning;
 
 static void workshop_start(void)
 {
@@ -106,7 +129,7 @@ static void workshop_start(void)
     WiFi.persistent(false);
     WiFi.setHostname("kronograf");
     WiFi.mode(WIFI_STA);
-    WiFi.begin(KG_WIFI_SSID, KG_WIFI_PASS);
+    WiFi.begin(s_ssid, s_pass);
     s_status = "atelier : connexion";
 }
 
@@ -123,10 +146,15 @@ static void workshop_stop(void)
 
 void net_workshop_loop(void)
 {
-    if (!KG_WORKSHOP || !KG_HAS_WIFI || s_task) return; /* la synchro NTP a la priorité */
-    bool usb = hal_battery().usb;
-    if (usb && !s_workshop) workshop_start();
-    else if (!usb && s_workshop) workshop_stop();
+    if (!KG_WORKSHOP || !have_wifi() || s_task || s_scanning) return; /* synchro NTP et scan ont la priorité */
+    bool usb = power_usb_stable();
+    if (usb && !s_workshop) {
+        guard_crumb(KG_CRUMB_WORKSHOP_ON);
+        workshop_start();
+    } else if (!usb && s_workshop) {
+        guard_crumb(KG_CRUMB_WORKSHOP_OFF);
+        workshop_stop();
+    }
     if (!s_workshop) return;
 
     if (!s_ota_ready && WiFi.status() == WL_CONNECTED) {
@@ -145,3 +173,48 @@ void net_workshop_loop(void)
     }
     if (s_ota_ready) ArduinoOTA.handle();
 }
+
+/* ------------------------------------------------------------- saisie Wi-Fi */
+
+void hal_wifi_scan_start(void)
+{
+    if (s_task) return;
+    s_scanning = true;
+    if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
+    WiFi.scanDelete();
+    WiFi.scanNetworks(true /* asynchrone */, false);
+}
+
+int hal_wifi_scan_count(void)
+{
+    int n = WiFi.scanComplete();
+    if (n == WIFI_SCAN_RUNNING) return -1;
+    if (s_scanning) {
+        s_scanning = false;
+        if (!s_workshop) WiFi.mode(WIFI_OFF); /* pas de Wi-Fi laissé allumé après un scan */
+    }
+    return n < 0 ? 0 : n;
+}
+
+bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi)
+{
+    if (i < 0 || i >= WiFi.scanComplete()) return false;
+    snprintf(ssid, n, "%s", WiFi.SSID(i).c_str());
+    *rssi = WiFi.RSSI(i);
+    return true;
+}
+
+void hal_wifi_set_credentials(const char *ssid, const char *pass)
+{
+    Preferences p;
+    p.begin("kgnet", false);
+    p.putString("ssid", ssid);
+    p.putString("pass", pass);
+    p.end();
+    if (s_workshop) workshop_stop();
+    net_start_time_sync(); /* recharge les identifiants et tente une synchro */
+}
+
+const char *hal_wifi_ssid(void) { return s_ssid; }
+
+const char *hal_net_status(void) { return s_status; }

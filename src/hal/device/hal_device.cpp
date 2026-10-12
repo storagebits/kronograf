@@ -136,10 +136,7 @@ void hal_device_init(void)
     ledcAttachPin(PIN_TFT_BL, BL_CHANNEL);
     ledcWrite(BL_CHANNEL, 0);
 
-#ifdef PIN_MOTOR
-    pinMode(PIN_MOTOR, OUTPUT);
-    digitalWrite(PIN_MOTOR, LOW);
-#endif
+    feedback_init();
 }
 
 const kg_inventory_t *hal_inventory(void) { return &s_inv; }
@@ -166,16 +163,7 @@ kg_battery_t hal_battery(void)
 
 void hal_backlight(uint8_t level) { ledcWrite(BL_CHANNEL, level); }
 
-void hal_vibrate(uint16_t ms)
-{
-#ifdef PIN_MOTOR
-    digitalWrite(PIN_MOTOR, HIGH);
-    delay(ms); /* Tranche 0 seulement ; remplacé par un minuteur non bloquant en Tranche 1 */
-    digitalWrite(PIN_MOTOR, LOW);
-#else
-    (void)ms;
-#endif
-}
+
 
 void *hal_alloc_large(size_t bytes) { return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM); }
 
@@ -232,4 +220,18 @@ void hal_setting_set(const char *key, int32_t value)
     p.begin("kg", false);
     if (p.getInt(key, value - 1) != value) p.putInt(key, value); /* évite d'user la flash */
     p.end();
+}
+
+/* Haut-parleur V1 : l'ampli MAX98357A est alimenté par LDO3 (pas un rail de l'ESP32). */
+void pmu_audio_power(bool on)
+{
+    if (!s_inv.pmu || !s_inv.speaker) return;
+#if defined(KG_BOARD_V1)
+    if (on) {
+        s_pmu.setLDO3Voltage(3300);
+        s_pmu.enableLDO3();
+    } else {
+        s_pmu.disableLDO3();
+    }
+#endif
 }

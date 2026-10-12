@@ -19,7 +19,8 @@ static void update(lv_timer_t *t)
     hal_now(&now, NULL);
     if (now.tm_min == s_last_min) return;
     s_last_min = now.tm_min;
-    lv_label_set_text_fmt(s_time, "%02d:%02d", now.tm_hour, now.tm_min);
+    if (ui_fmt24()) lv_label_set_text_fmt(s_time, "%02d:%02d", now.tm_hour, now.tm_min);
+    else lv_label_set_text_fmt(s_time, "%d:%02d", ui_display_hour(now.tm_hour), now.tm_min);
 }
 
 static void set_active(bool on)

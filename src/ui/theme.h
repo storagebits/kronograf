@@ -51,6 +51,13 @@
 #define KG_C_NIGHT_DIM   lv_color_hex(0x3A0806)
 #define KG_NIGHT_BRIGHTNESS_PCT 25
 
+/* Apps */
+#define KG_C_BTN         lv_color_hex(0x1C1F23)   /* bouton neutre */
+#define KG_C_BTN_PRESS   lv_color_hex(0x2C3036)
+#define KG_C_ACCENT      KG_C_SECONDS             /* action principale : orange aviation */
+#define KG_C_ALERT_BG    lv_color_hex(0x2A0A04)   /* fond de l'écran d'alerte */
+#define KG_STEPS_GOAL    10000
+
 /* Animations (Tranche 7 : harmonisées ici) */
 #define KG_ANIM_FACE_MS  280                      /* transition entre cadrans */
 

@@ -7,6 +7,11 @@
  *   timeout <s> délai d'extinction
  *   battlog     journal d'autonomie de la dernière période sur batterie
  *   face <n>    affiche le cadran n (0 aviateur, 1 circuits, 2 nuit)
+ *   launcher    ouvre le lanceur d'apps
+ *   app <nom>   ouvre une app (chrono, timer, alarms, steps, settings)
+ *   ring <alarm|timer>  écran d'alerte + sonnerie (test)
+ *   timer <s>   lance le minuteur (test des échéances)
+ *   beep        bip court (test du haut-parleur)
  *   egg         déclenche la décharge du cadran Circuits temporels
  *   coredump [erase]  résumé du dernier plantage (et effacement)
  *   reboot      redémarre la montre
@@ -21,11 +26,15 @@
 #include "lvgl.h"
 #include "../../ui/ui.h"
 #include "../../ui/faces.h"
+#include "../../ui/nav.h"
+#include "../../ui/model.h"
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <esp_core_dump.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <esp_sleep.h>
+#include <esp_task_wdt.h>
 #include <esp_log.h>
 #include <WiFi.h>
 #include <mbedtls/base64.h>
@@ -47,7 +56,9 @@ static void cmd_status(void)
     size_t int_total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     lv_mem_monitor_t lv;
     lv_mem_monitor(&lv);
+    char gbuf[120];
     s_out->printf("rev=V%d uptime=%lus reset=%d\n", inv->rev, (unsigned long)(millis() / 1000), (int)esp_reset_reason());
+    s_out->printf("garde : %s\n", guard_report(gbuf, sizeof gbuf));
     s_out->printf("heap_internal free=%u/%u (%u%%) min=%u largest=%u\n", (unsigned)int_free,
                   (unsigned)int_total, (unsigned)(int_free * 100 / int_total),
                   (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -78,6 +89,22 @@ static void cmd_status(void)
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, hal_time_valid(), net_status());
 }
 
+/* Écrit tout le tampon : sur TCP, write() peut n'en accepter qu'une partie quand le
+ * tampon d'envoi lwIP est plein ; on réessaie (2 s max) au lieu de perdre des octets. */
+static void write_all(const uint8_t *data, size_t len)
+{
+    uint32_t t0 = millis();
+    while (len && millis() - t0 < 2000) {
+        esp_task_wdt_reset(); /* commandes longues (capture ~9 s en Wi-Fi) : nourrir le chien de garde */
+        size_t n = s_out->write(data, len);
+        data += n;
+        len -= n;
+        if (!n) delay(2);
+    }
+}
+
+static void print_all(const char *text) { write_all((const uint8_t *)text, strlen(text)); }
+
 /* Format : "KGSHOT <w> <h> rgb565 swap=<0|1>", puis "R<y>:<base64>" par rangée, "KGSHOT END". */
 static void cmd_screenshot(void)
 {
@@ -100,9 +127,11 @@ static void cmd_screenshot(void)
     for (int y = 0; y < h; y++) {
         size_t olen = 0;
         mbedtls_base64_encode(line, sizeof line, &olen, buf + y * w * 2, w * 2);
-        s_out->printf("R%d:", y); /* index de rangée : les lignes de log intercalées sont ignorées */
-        s_out->write(line, olen);
-        s_out->write('\n');
+        char head[8];
+        snprintf(head, sizeof head, "R%d:", y); /* index de rangée : les lignes de log intercalées sont ignorées */
+        print_all(head);
+        line[olen] = '\n';
+        write_all(line, olen + 1);
     }
     s_out->println("KGSHOT END");
     heap_caps_free(buf);
@@ -154,9 +183,11 @@ static void cmd_coredump_raw(void)
         esp_partition_read(part, addr - part->address + off, chunk, n);
         size_t olen = 0;
         mbedtls_base64_encode(line, sizeof line, &olen, chunk, n);
-        s_out->printf("C%u:", (unsigned)off);
-        s_out->write(line, olen);
-        s_out->write('\n');
+        char head[16];
+        snprintf(head, sizeof head, "C%u:", (unsigned)off);
+        print_all(head);
+        line[olen] = '\n';
+        write_all(line, olen + 1);
     }
     s_out->println("COREDUMP END");
 }
@@ -180,6 +211,24 @@ static void run(char *cmd)
         ui_faces_show(atoi(cmd + 5), true);
         s_out->printf("cadran %s\n", ui_faces_name(ui_faces_current()));
     } else if (!strcmp(cmd, "egg")) face_circuits_discharge();
+    else if (!strcmp(cmd, "launcher")) {
+        power_force(true);
+        ui_nav_open_launcher();
+    } else if (!strncmp(cmd, "app ", 4)) {
+        power_force(true);
+        s_out->println(ui_nav_open_app(cmd + 4) ? "ok" : "app inconnue (ou transition en cours)");
+    } else if (!strncmp(cmd, "ring ", 5)) {
+        power_force(true);
+        ui_nav_test_alert(!strcmp(cmd + 5, "alarm"));
+    } else if (!strncmp(cmd, "timer ", 6)) {
+        model_timer_set(1000u * atoi(cmd + 6));
+        model_timer_start_pause();
+        s_out->println("ok");
+    } else if (!strcmp(cmd, "beep")) {
+        static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
+        hal_tones(t, 3);
+        s_out->println(hal_sound_available() ? "ok" : "pas de haut-parleur");
+    }
     else if (!strcmp(cmd, "sleep")) power_force(false);
     else if (!strcmp(cmd, "wake")) power_force(true);
     else if (!strncmp(cmd, "bl ", 3)) power_set_brightness((uint8_t)atoi(cmd + 3));
@@ -189,6 +238,7 @@ static void run(char *cmd)
         uint32_t end = millis() + 1000 * secs;
         int16_t x, y;
         while (millis() < end) {
+            esp_task_wdt_reset();
             lv_timer_handler(); /* fait tourner la lecture tactile */
             if (touch_last(&x, &y)) s_out->printf("touch %d %d\n", x, y);
             delay(50);
@@ -204,7 +254,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 
