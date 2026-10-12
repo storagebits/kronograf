@@ -83,3 +83,9 @@ void *hal_alloc_large(size_t bytes)
     if (p) memset(p, 0xA5, bytes);
     return p;
 }
+
+bool hal_time_valid(void) { return getenv("KG_NOTIME") == NULL; }
+
+time_t hal_last_sync(void) { return time(NULL) - 12 * 60; }
+
+const char *hal_time_hint(void) { return hal_time_valid() ? NULL : "Configurer dans secrets.h"; }

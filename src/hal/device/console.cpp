@@ -2,6 +2,9 @@
  * Console série de diagnostic (115200 bauds, une commande par ligne).
  *   status      heap interne / PSRAM, FPS, batterie, uptime, révision
  *   screenshot  capture LVGL de l'écran courant, envoyée en base64 (tools/screenshot.py)
+ *   sleep|wake  éteint / rallume l'écran
+ *   bl <n>      rétroéclairage 8..255
+ *   timeout <s> délai d'extinction
  *   diag        affiche l'écran de diagnostic de la Tranche 0
  *   touch       affiche les points touchés pendant 10 s (calibration)
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
@@ -38,6 +41,12 @@ static void cmd_status(void)
     Serial.printf("lvgl_mem used=%u%% frag=%u%%\n", lv.used_pct, lv.frag_pct);
     Serial.printf("fps=%.1f cpu=%luMHz\n", display_fps(), (unsigned long)getCpuFrequencyMhz());
     Serial.printf("battery=%d%% %dmV charging=%d usb=%d\n", b.percent, b.millivolts, b.charging, b.usb);
+    Serial.printf("screen=%s wake=%s steps=%lu\n", power_screen_on() ? "on" : "off", power_wake_reason(),
+                  (unsigned long)hal_steps_today());
+    struct tm t;
+    hal_now(&t, nullptr);
+    Serial.printf("time=%04d-%02d-%02d %02d:%02d:%02d valid=%d net=%s\n", t.tm_year + 1900, t.tm_mon + 1,
+                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, hal_time_valid(), net_status());
 }
 
 /* Format : "KGSHOT <w> <h> rgb565 swap=<0|1>", 1 ligne base64 par rangée, "KGSHOT END". */
@@ -73,6 +82,10 @@ static void run(char *cmd)
 {
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
+    else if (!strcmp(cmd, "sleep")) power_force(false);
+    else if (!strcmp(cmd, "wake")) power_force(true);
+    else if (!strncmp(cmd, "bl ", 3)) power_set_brightness((uint8_t)atoi(cmd + 3));
+    else if (!strncmp(cmd, "timeout ", 8)) power_set_timeout(1000u * atoi(cmd + 8));
     else if (!strcmp(cmd, "touch")) {
         uint32_t end = millis() + 10000;
         int16_t x, y;
@@ -92,7 +105,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         Serial.println("ok");
-    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | touch | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | diag | lcdtest | log <0-5> | help");
     else if (*cmd) Serial.printf("commande inconnue : %s\n", cmd);
 }
 

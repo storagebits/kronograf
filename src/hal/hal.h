@@ -46,6 +46,15 @@ const kg_inventory_t *hal_inventory(void);
 /* Heure locale (America/Toronto, DST géré par la libc via TZ). */
 void hal_now(struct tm *out, uint32_t *ms);
 
+/* Faux tant que l'heure n'a été ni lue d'une RTC fiable ni synchronisée. */
+bool hal_time_valid(void);
+
+/* Horodatage de la dernière synchro NTP réussie (0 = jamais). */
+time_t hal_last_sync(void);
+
+/* Texte court pour l'utilisateur si l'heure ne peut pas être réglée, sinon NULL. */
+const char *hal_time_hint(void);
+
 kg_battery_t hal_battery(void);
 uint32_t hal_steps_today(void);
 

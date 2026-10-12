@@ -45,7 +45,7 @@ static lv_obj_t *s_scr, *s_canvas;
 static lv_color_t *s_bg;
 static hand_t s_hour, s_min, s_sec, s_batt, s_chrono, s_steps;
 static lv_obj_t *s_counterweight;
-static lv_obj_t *s_date, *s_weekday, *s_batt_pct;
+static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint;
 static float s_bezel_deg;      /* rotation de la lunette */
 static lv_coord_t s_drag_last;
 static int s_last_mday = -1;
@@ -365,6 +365,14 @@ static void update(lv_timer_t *t)
 
     hand_set(&s_chrono, 0); /* relié au chronomètre en Tranche 3 */
 
+    const char *hint = hal_time_hint();
+    if (hint) {
+        lv_label_set_text(s_hint, hint);
+        lv_obj_clear_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
+    }
+
     if (now.tm_mday != s_last_mday) {
         s_last_mday = now.tm_mday;
         lv_label_set_text_fmt(s_date, "%d", now.tm_mday);
@@ -447,6 +455,18 @@ lv_obj_t *ui_face_aviator_create(void)
     s_counterweight = cap(s_scr, (pt_t){CX, CY}, 8, KG_C_SECONDS);
     cap(s_scr, (pt_t){CX, CY}, 9, KG_C_SECONDS);
     cap(s_scr, (pt_t){CX, CY}, 3, KG_C_HAND_EDGE);
+
+    /* Heure non réglée : pastille ambre en bas, au-dessus de tout. */
+    s_hint = lv_label_create(s_scr);
+    lv_obj_set_style_text_font(s_hint, &kg_font_text_16, 0);
+    lv_obj_set_style_text_color(s_hint, KG_C_BG, 0);
+    lv_obj_set_style_bg_color(s_hint, KG_C_WARN, 0);
+    lv_obj_set_style_bg_opa(s_hint, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_hint, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_pad_hor(s_hint, 8, 0);
+    lv_obj_set_style_pad_ver(s_hint, 1, 0);
+    lv_obj_align(s_hint, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
 
     update(NULL);
     lv_timer_create(update, SWEEP_MS, NULL);

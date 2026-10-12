@@ -14,4 +14,30 @@ void display_test_pattern(void);
 void touch_init(void);
 bool touch_last(int16_t *x, int16_t *y);
 
+/* Horloge PCF8563 */
+void rtc_from_system(void);
+
+/* AXP202 : interruptions bouton / USB (aucun rail modifié) */
+#define PMU_IRQ_BUTTON 0x1
+#define PMU_IRQ_VBUS   0x2
+void pmu_enable_button_irq(void);
+void pmu_clear_irq(void);
+uint32_t pmu_read_irq(void);
+
+/* Écran */
+void display_sleep(bool sleep);
+
+/* Énergie */
+void power_init(void);
+void power_loop(void);
+bool power_screen_on(void);
+const char *power_wake_reason(void);
+void power_set_brightness(uint8_t level);
+void power_set_timeout(uint32_t ms);
+void power_force(bool on);
+
+/* Réseau : synchro NTP en tâche de fond si secrets.h fournit un Wi-Fi */
+void net_start_time_sync(void);
+const char *net_status(void);
+
 void console_poll(void);

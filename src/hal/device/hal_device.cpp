@@ -32,6 +32,31 @@ static bool probe(TwoWire &bus, uint8_t addr)
 
 static uint8_t bcd2bin(uint8_t v) { return (v & 0x0F) + 10 * (v >> 4); }
 
+static bool s_time_valid;
+
+static uint8_t bin2bcd(int v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+
+/* Écrit l'heure système dans le PCF8563, en UTC ; efface le bit VL. */
+void rtc_from_system(void)
+{
+    time_t now = time(nullptr);
+    struct tm u;
+    gmtime_r(&now, &u);
+    s_sensors.beginTransmission(I2C_PCF8563);
+    s_sensors.write(0x02);
+    s_sensors.write(bin2bcd(u.tm_sec)); /* VL = 0 */
+    s_sensors.write(bin2bcd(u.tm_min));
+    s_sensors.write(bin2bcd(u.tm_hour));
+    s_sensors.write(bin2bcd(u.tm_mday));
+    s_sensors.write(bin2bcd(u.tm_wday));
+    s_sensors.write(bin2bcd(u.tm_mon + 1)); /* siècle = 0 → 20xx */
+    s_sensors.write(bin2bcd(u.tm_year % 100));
+    s_sensors.endTransmission();
+    s_time_valid = true;
+}
+
+bool hal_time_valid(void) { return s_time_valid; }
+
 /* Lit le PCF8563 (heure stockée en UTC) et règle l'horloge système. */
 static void rtc_to_system(void)
 {
@@ -41,9 +66,8 @@ static void rtc_to_system(void)
     if (s_sensors.requestFrom(I2C_PCF8563, 7) != 7) return;
     uint8_t r[7];
     for (auto &b : r) b = s_sensors.read();
-    if (r[0] & 0x80) {
-        log_w("RTC : bit VL (horloge non fiable, pile vide ou jamais réglée)");
-    }
+    s_time_valid = !(r[0] & 0x80);
+    if (!s_time_valid) log_w("RTC : bit VL (horloge non fiable, pile vide ou jamais réglée)");
     struct tm t = {};
     t.tm_sec = bcd2bin(r[0] & 0x7F);
     t.tm_min = bcd2bin(r[1] & 0x7F);
@@ -137,8 +161,6 @@ kg_battery_t hal_battery(void)
     return b;
 }
 
-uint32_t hal_steps_today(void) { return 0; /* Tranche 1 : BMA423 */ }
-
 void hal_backlight(uint8_t level) { ledcWrite(BL_CHANNEL, level); }
 
 void hal_vibrate(uint16_t ms)
@@ -153,3 +175,28 @@ void hal_vibrate(uint16_t ms)
 }
 
 void *hal_alloc_large(size_t bytes) { return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM); }
+
+void pmu_enable_button_irq(void)
+{
+    if (!s_inv.pmu) return;
+    s_pmu.disableIRQ(XPOWERS_AXP202_ALL_IRQ);
+    s_pmu.clearIrqStatus();
+    s_pmu.enableIRQ(XPOWERS_AXP202_PKEY_SHORT_IRQ | XPOWERS_AXP202_VBUS_INSERT_IRQ |
+                    XPOWERS_AXP202_VBUS_REMOVE_IRQ);
+}
+
+void pmu_clear_irq(void)
+{
+    if (s_inv.pmu) s_pmu.clearIrqStatus();
+}
+
+uint32_t pmu_read_irq(void)
+{
+    if (!s_inv.pmu) return 0;
+    s_pmu.getIrqStatus();
+    uint32_t what = 0;
+    if (s_pmu.isPekeyShortPressIrq()) what |= PMU_IRQ_BUTTON;
+    if (s_pmu.isVbusInsertIrq() || s_pmu.isVbusRemoveIrq()) what |= PMU_IRQ_VBUS;
+    s_pmu.clearIrqStatus();
+    return what;
+}

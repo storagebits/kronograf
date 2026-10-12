@@ -16,6 +16,7 @@ void setup()
     lv_init();
     display_init();
     touch_init();
+    power_init();
 
     uint32_t t0 = millis();
     lv_scr_load(ui_face_aviator_create());
@@ -23,7 +24,8 @@ void setup()
     lv_refr_now(nullptr);
     Serial.printf("cadran : rendu du fond %lu ms, première image %lu ms\n",
                   (unsigned long)(t1 - t0), (unsigned long)(millis() - t1));
-    hal_backlight(160); /* allumé seulement une fois la première image envoyée : pas de flash blanc */
+    power_set_brightness(160); /* allumé seulement une fois la première image envoyée : pas de flash blanc */
+    net_start_time_sync();
 
     const kg_inventory_t *inv = hal_inventory();
     Serial.printf("Kronograf prêt : V%d pmu=%d rtc=%d accel=%d touch=%d psram=%luKo flash=%luMo\n",
@@ -34,6 +36,7 @@ void setup()
 void loop()
 {
     console_poll();
+    power_loop();
     uint32_t wait = lv_timer_handler();
     vTaskDelay(pdMS_TO_TICKS(wait < 5 ? 1 : (wait > 20 ? 20 : wait)));
 }

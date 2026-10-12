@@ -23,6 +23,7 @@ static constexpr int BUF_LINES = 40;
 static constexpr int GAP_Y = 80;
 
 static esp_lcd_panel_handle_t s_panel;
+static esp_lcd_panel_io_handle_t s_io;
 static lv_disp_drv_t s_drv;
 static lv_disp_draw_buf_t s_draw_buf;
 
@@ -64,6 +65,7 @@ void display_init(void)
     io_cfg.on_color_trans_done = on_trans_done;
     io_cfg.user_ctx = &s_drv;
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_cfg, &io));
+    s_io = io;
 
     esp_lcd_panel_dev_config_t panel_cfg = {};
     panel_cfg.reset_gpio_num = -1;
@@ -96,6 +98,15 @@ void display_init(void)
     s_drv.draw_buf = &s_draw_buf;
     lv_disp_drv_register(&s_drv);
     s_fps_t0 = millis();
+}
+
+/* Veille de la dalle (SLPIN/SLPOUT) : quelques µA au lieu de ~6 mA. */
+void display_sleep(bool sleep)
+{
+    esp_lcd_panel_disp_on_off(s_panel, !sleep);
+    esp_lcd_panel_io_handle_t io = s_io;
+    esp_lcd_panel_io_tx_param(io, sleep ? 0x10 /* SLPIN */ : 0x11 /* SLPOUT */, nullptr, 0);
+    vTaskDelay(pdMS_TO_TICKS(sleep ? 5 : 120)); /* 120 ms exigés après SLPOUT */
 }
 
 /* Images complètes envoyées par seconde, moyennées depuis le dernier appel. */
