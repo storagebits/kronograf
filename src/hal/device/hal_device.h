@@ -1,6 +1,7 @@
 /* Fonctions propres à la cible montre (non vues par l'UI). */
 #pragma once
 #include <stdint.h>
+class Print;
 
 /* Fuseau America/Toronto avec règles DST nord-américaines. */
 #define KG_TZ "EST5EDT,M3.2.0,M11.1.0"
@@ -27,6 +28,10 @@ void pmu_clear_irq(void);
 uint32_t pmu_read_irq(void);
 float pmu_discharge_ma(void);
 float pmu_vbus_ma(void);
+float pmu_discharged_mah(void);
+
+/* Journal d'autonomie (sur batterie) */
+void battlog_print(Print &out);
 
 /* Écran */
 void display_sleep(bool sleep);

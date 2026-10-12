@@ -123,6 +123,7 @@ void hal_device_init(void)
         s_pmu.enableBattVoltageMeasure();
         s_pmu.enableVbusVoltageMeasure();
         s_pmu.enableAdcChannel(0x40 | 0x04); /* ADC_EN1 : courant batterie (b6) et VBUS (b2) — mesures seulement */
+        s_pmu.enableCoulomb();               /* compteur coulométrique : consommation réelle, sommeil compris */
         s_pmu.setChargingLedMode(XPOWERS_CHG_LED_OFF);
     } else {
         s_inv.pmu = false;
@@ -205,3 +206,11 @@ uint32_t pmu_read_irq(void)
 /* Courant de décharge batterie en mA (0 sur USB) : base des estimations d'autonomie. */
 float pmu_discharge_ma(void) { return s_inv.pmu ? s_pmu.getBattDischargeCurrent() : 0; }
 float pmu_vbus_ma(void) { return s_inv.pmu ? s_pmu.getVbusCurrent() : 0; }
+
+/* mAh déchargés depuis la mise sous tension de l'AXP202 (compteur coulométrique). */
+float pmu_discharged_mah(void)
+{
+    if (!s_inv.pmu) return 0;
+    uint8_t rate = s_pmu.getAdcSamplingRate();
+    return rate ? 65536.0f * 0.5f * s_pmu.getBattDischargeCoulomb() / 3600.0f / rate : 0;
+}

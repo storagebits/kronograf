@@ -30,6 +30,71 @@ static uint32_t s_wake_ms;
 static const char *s_wake_reason = "démarrage";
 static uint32_t s_light_sleeps, s_wakes;
 
+/* ------------------------------------------------------ journal d'autonomie
+ * Démarre au débranchement de l'USB, un échantillon par minute (RAM : perdu au
+ * redémarrage, conservé pendant le sommeil léger). */
+static constexpr float BATTERY_MAH = 380.0f; /* LiPo T-Watch 2020 */
+struct batt_sample {
+    uint32_t t_s;      /* secondes depuis le débranchement */
+    uint16_t mv;
+    float mah;         /* consommés depuis le débranchement */
+    uint32_t screen_s; /* temps écran allumé cumulé */
+};
+static constexpr int BATTLOG_N = 1440; /* 24 h à 1 / min */
+static batt_sample *s_log;
+static int s_log_n;
+static bool s_on_battery;
+static uint32_t s_unplug_ms;
+static float s_unplug_mah;
+static uint32_t s_screen_ms_total, s_screen_on_since;
+
+static uint32_t screen_seconds(void)
+{
+    return (s_screen_ms_total + (s_screen_on_since ? millis() - s_screen_on_since : 0)) / 1000;
+}
+
+static void battlog_tick(bool usb)
+{
+    static uint32_t last;
+    if (usb) {
+        s_on_battery = false;
+        return;
+    }
+    if (!s_on_battery) { /* débranchement : nouvelle campagne */
+        s_on_battery = true;
+        s_unplug_ms = millis();
+        s_unplug_mah = pmu_discharged_mah();
+        s_screen_ms_total = 0;
+        s_screen_on_since = s_screen_on ? millis() : 0;
+        s_log_n = 0;
+        last = 0;
+    }
+    uint32_t t = (millis() - s_unplug_ms) / 1000;
+    if (s_log_n && t - last < 60) return;
+    last = t;
+    if (!s_log) s_log = static_cast<batt_sample *>(hal_alloc_large(sizeof(batt_sample) * BATTLOG_N));
+    if (!s_log || s_log_n >= BATTLOG_N) return;
+    s_log[s_log_n++] = {t, (uint16_t)hal_battery().millivolts, pmu_discharged_mah() - s_unplug_mah, screen_seconds()};
+}
+
+void battlog_print(Print &out)
+{
+    if (!s_log_n) {
+        out.println("battlog : aucune campagne (débrancher l'USB pour en démarrer une)");
+        return;
+    }
+    const batt_sample &a = s_log[0], &z = s_log[s_log_n - 1];
+    float hours = (z.t_s - a.t_s) / 3600.0f;
+    float avg_ma = hours > 0 ? z.mah / hours : 0;
+    out.printf("battlog : %d échantillons, %.2f h, %.1f mAh, moyenne %.2f mA, écran %lu s (%.1f %%), %u→%u mV\n",
+               s_log_n, hours, z.mah, avg_ma, (unsigned long)z.screen_s,
+               hours > 0 ? 100.0f * z.screen_s / (hours * 3600) : 0, a.mv, z.mv);
+    if (avg_ma > 0) out.printf("autonomie estimée à cet usage : %.1f h (%.0f mAh)\n", BATTERY_MAH / avg_ma, BATTERY_MAH);
+    for (int i = 0; i < s_log_n; i += (s_log_n > 60 ? s_log_n / 60 : 1))
+        out.printf("  t=%5lus %4umV %6.2fmAh ecran=%lus\n", (unsigned long)s_log[i].t_s, s_log[i].mv, s_log[i].mah,
+                   (unsigned long)s_log[i].screen_s);
+}
+
 static void IRAM_ATTR on_bma_irq() { s_bma_irq = true; }
 static void IRAM_ATTR on_axp_irq() { s_axp_irq = true; }
 
@@ -90,6 +155,8 @@ static void screen_off(void)
 {
     if (!s_screen_on) return;
     s_screen_on = false;
+    if (s_screen_on_since) s_screen_ms_total += millis() - s_screen_on_since;
+    s_screen_on_since = 0;
     Serial.println("event sleep");
     for (int b = s_brightness; b > 0; b -= 16) { /* extinction douce, ~80 ms */
         hal_backlight(b);
@@ -106,6 +173,7 @@ static void screen_on(const char *reason)
     lv_disp_trig_activity(nullptr);
     if (s_screen_on) return;
     s_screen_on = true;
+    s_screen_on_since = millis();
     s_wakes++;
     Serial.printf("event wake %s\n", reason);
     setCpuFrequencyMhz(240);
@@ -170,6 +238,7 @@ static const char *poll_irqs(void)
 
 void power_loop(void)
 {
+    battlog_tick(hal_battery().usb);
     const char *reason = poll_irqs();
     if (reason) screen_on(reason);
 

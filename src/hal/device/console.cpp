@@ -5,6 +5,7 @@
  *   sleep|wake  éteint / rallume l'écran
  *   bl <n>      rétroéclairage 8..255
  *   timeout <s> délai d'extinction
+ *   battlog     journal d'autonomie de la dernière période sur batterie
  *   diag        affiche l'écran de diagnostic de la Tranche 0
  *   touch [s]   affiche les points touchés pendant s secondes (10 par défaut)
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
@@ -98,6 +99,7 @@ static void run(char *cmd)
 {
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
+    else if (!strcmp(cmd, "battlog")) battlog_print(*s_out);
     else if (!strcmp(cmd, "sleep")) power_force(false);
     else if (!strcmp(cmd, "wake")) power_force(true);
     else if (!strncmp(cmd, "bl ", 3)) power_set_brightness((uint8_t)atoi(cmd + 3));
@@ -122,7 +124,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 

@@ -2,7 +2,7 @@
 
 Firmware de montre pour **LilyGO T-Watch 2020 V1** : cadran de chronographe d'aviation et afficheurs 7 segments « circuits temporels ». PlatformIO + Arduino-ESP32 + LVGL 8.3, avec un simulateur macOS qui compile exactement la même interface.
 
-> État : **Tranche 0** terminée (fondations, simulateur, captures, console série, écran de diagnostic flashé et vérifié). Voir `DECISIONS.md` pour le journal des choix et `BLOCKERS.md` pour les problèmes rencontrés.
+> État : **Tranches 0 et 1** (fondations ; cadran Chronographe aviateur, NTP, veille et réveils, mode atelier OTA). Voir `DECISIONS.md` pour le journal des choix et `BLOCKERS.md` pour les problèmes rencontrés.
 
 | Simulateur | Montre (capture série) |
 |---|---|
@@ -34,12 +34,25 @@ pio run -e twatch-v1 -t upload --upload-port /dev/cu.usbserial-XXXX
 
 Utiliser `/dev/cu.usbserial-*` (et non `cu.SLAB_USBtoUART`). 230 400 bauds : le câble actuel produit du bruit au-delà.
 
+### Mode atelier (Wi-Fi, sans câble de données)
+
+Montre sur USB (alimentation) et `include/secrets.h` renseigné : la montre reste en Wi-Fi.
+
+```sh
+pio run -e twatch-v1-ota -t upload                   # mise à jour OTA (kronograf.local)
+tools/kg.py --host kronograf.local status            # console TCP 2323, mêmes commandes
+```
+
+Débranchée, le Wi-Fi est coupé.
+
 ### Console série
 
 ```sh
 tools/kg.py status                                   # mémoire, FPS, batterie, révision
 tools/kg.py screenshot docs/screens/device/x.png     # capture LVGL → PNG
 tools/kg.py lcdtest                                  # mire rouge | vert | bleu 5 s
+tools/kg.py battlog                                  # journal d'autonomie (dernière période sur batterie)
+tools/kg.py sleep | wake | bl <8-255> | timeout <s> | touch [s] | diag
 tools/kg.py log 3
 ```
 
