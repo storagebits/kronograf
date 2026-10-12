@@ -62,3 +62,19 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D24. Blocage au réveil (chien de garde) — corrigé.** Symptôme : après quelques cycles veille/réveil en mode atelier, plus de réponse puis `reset=6` (TWDT). Coredump : cœur 0 accaparé par la tâche `wifi`. Cause : `setCpuFrequencyMhz(80)` appelé à chaque tour de boucle écran éteint, et 240 MHz au réveil, **avec le Wi-Fi actif** — ce qui casse la pile Wi-Fi d'Arduino-ESP32. Correctif : fréquence changée seulement sur transition réelle et jamais Wi-Fi allumé ; pas de sommeil léger Wi-Fi allumé. Validé : 30 cycles veille/réveil/cadran sans reset ni coredump (avant : échec en < 3 cycles).
 
 **D25. Outillage de diagnostic :** boucle principale sous chien de garde 8 s en mode panique (coredump au lieu d'un reset muet), nourri pendant l'OTA ; commandes `coredump`, `coredump raw` (décodage par `esp-coredump` avec toutes les piles), `reboot` ; chaque build archive son ELF dans `build-archive/<sha256[:16]>.elf` (l'empreinte inscrite dans les coredumps) — un dump est toujours décodable.
+
+## Tranche 3 — 2026-10-12
+
+**D26. Lanceur = grille de « sous-cadrans »** (2 × 3, boutons ronds creusés comme les compteurs du cadran aviateur, pictogrammes vectoriels dessinés en code) plutôt qu'une liste : cohérent avec l'univers horloger, tout tient sur un écran sans défilement. Gestes : glissé vers le haut depuis un cadran → lanceur ; vers le bas → retour au cadran ; glissé à droite dans une app → lanceur. Transitions par instantanés (module `transition.c`, commun aux cadrans).
+
+**D27. Modèle sans minuteur LVGL** (`model.c`) : chronomètre, minuteur et alarmes sont calculés à partir d'horodatages (tick pour le chrono, heure murale pour minuteur et alarmes) ; ils continuent écran éteint et en sommeil léger. La gestion d'énergie interroge `model_next_event_time()` pour programmer son réveil minuté et rallume l'écran à l'échéance ; le « shell » de l'UI affiche alors l'alerte (vibration + carillon, répétés toutes les 2,2 s, une minute max ; alarme non acquittée → répétition auto à +5 min). Validé sur montre : minuteur lancé écran éteint → réveil `échéance` → écran d'alerte.
+
+**D28. Sons synthétisés** : tâche audio dédiée (cœur 0), sinus avec attaque/relâche de 6 ms (pas de clic), I²S 16 kHz vers le MAX98357A ; l'ampli (LDO3, rail audio de la V1 — pas un rail ESP32) n'est alimenté que pendant la lecture. Vibreur piloté par `esp_timer` (motifs non bloquants), retour haptique de 12 ms sur chaque touche.
+
+**D29. Pas sur 7 jours** : au premier passage d'un nouveau jour, le compte du BMA423 est poussé dans un historique NVS glissant (`st0`…`st6`) avant remise à zéro ; les jours où la montre n'a pas tourné valent 0.
+
+**D30. Wi-Fi saisi sur la montre** (Réglages → Wi-Fi : scan asynchrone, clavier tactile, mot de passe masqué et effacé de l'écran après validation), stocké en NVS (`kgnet`) et prioritaire sur `secrets.h`. Le scan n'allume le Wi-Fi que le temps du scan. Clavier en Montserrat 14 (seule police avec les symboles du clavier LVGL ; nos polices générées sont `const`, sans police de secours).
+
+**D31. Réglages** : luminosité (curseur), mise en veille 5/10/15/30 s, cadran par défaut (appliqué au retour sur les cadrans), format 24 h (cadrans numériques), à propos. Tous persistants (NVS).
+
+**D32. Robustesse (cf. B3)** : restauration des interruptions GPIO après sommeil léger ; anti-rebond USB 3 s ; écritures TCP « tout ou rien » et chien de garde nourri pendant les commandes longues (une capture Wi-Fi dépassait les 8 s du chien de garde — vu au coredump) ; chien de garde RTC + miettes de pain RTC (efficacité limitée en sommeil léger, documentée en B3).
