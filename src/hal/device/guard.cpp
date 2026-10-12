@@ -1,9 +1,9 @@
 /*
  * Garde-fous contre les gels :
  *
- *  - Chien de garde RTC (RWDT, 90 s) : contrairement aux chiens de garde des tâches et des
- *    interruptions, il tourne aussi pendant le sommeil léger. Une montre figée redémarre
- *    seule au lieu d'attendre une extinction forcée au bouton.
+ *  - Chien de garde RTC (RWDT, 90 s), en plus de ceux des tâches et des interruptions :
+ *    une montre figée éveillée redémarre seule au lieu d'attendre une extinction forcée.
+ *    Il est coupé pendant le sommeil léger (voir guard_suspend).
  *  - « Miettes de pain » en mémoire RTC non initialisée : elles survivent à ce redémarrage
  *    et disent à quelle étape la montre s'était arrêtée (affichées par `status`).
  */
@@ -26,6 +26,21 @@ static const char *const NAMES[] = {
     "écran éteint", "écran allumé", "atelier on", "atelier off", "réseau",
 };
 
+static void arm(void)
+{
+    rtc_wdt_protect_off();
+    rtc_wdt_disable();
+    rtc_wdt_set_length_of_reset_signal(RTC_WDT_SYS_RESET_SIG, RTC_WDT_LENGTH_3_2us);
+    /* RESET_RTC (tout le circuit) plutôt que RESET_SYSTEM : une réinitialisation « système »
+     * déclenchée hors de l'état éveillé peut laisser la puce bloquée (vu avec `hangtest`). */
+    rtc_wdt_set_stage(RTC_WDT_STAGE0, RTC_WDT_STAGE_ACTION_RESET_RTC);
+    rtc_wdt_set_time(RTC_WDT_STAGE0, RWDT_MS);
+    rtc_wdt_enable();
+    /* Le RWDT reste en pause pendant le sommeil (réglage par défaut) : le compter en sommeil
+     * a été essayé et rendait la montre irrécupérable sur batterie (B3). */
+    rtc_wdt_protect_on();
+}
+
 void guard_init(void)
 {
     esp_reset_reason_t why = esp_reset_reason();
@@ -38,20 +53,23 @@ void guard_init(void)
     r_magic = MAGIC;
     r_crumb = r_prev = KG_CRUMB_NONE;
 
-    rtc_wdt_protect_off();
-    rtc_wdt_disable();
-    rtc_wdt_set_length_of_reset_signal(RTC_WDT_SYS_RESET_SIG, RTC_WDT_LENGTH_3_2us);
-    rtc_wdt_set_stage(RTC_WDT_STAGE0, RTC_WDT_STAGE_ACTION_RESET_SYSTEM);
-    rtc_wdt_set_time(RTC_WDT_STAGE0, RWDT_MS);
-    rtc_wdt_enable();
-    /* Par défaut, le RWDT se met en pause pendant le sommeil (bit WDT_PAUSE_IN_SLP), ce qui
-     * le rend aveugle à un sommeil léger dont on ne sortirait jamais — vérifié par
-     * `hangtest`. On l'efface : le RWDT compte aussi en sommeil (≤ 60 s chez nous). */
-    REG_CLR_BIT(RTC_CNTL_WDTCONFIG0_REG, RTC_CNTL_WDT_PAUSE_IN_SLP);
-    rtc_wdt_protect_on();
+    arm();
 }
 
 void guard_feed(void) { rtc_wdt_feed(); }
+
+/* Coupe le RWDT autour de esp_light_sleep_start() : on laisse le sommeil léger dans
+ * l'état exact que l'IDF attend (il gère lui-même le RTC WDT à la sortie de sommeil). */
+void guard_suspend(bool off)
+{
+    if (off) {
+        rtc_wdt_protect_off();
+        rtc_wdt_disable(); /* remet aussi les étapes à OFF : arm() les reconfigure */
+        rtc_wdt_protect_on();
+    } else {
+        arm();
+    }
+}
 
 void guard_crumb(uint32_t id)
 {

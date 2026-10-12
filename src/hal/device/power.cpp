@@ -267,12 +267,15 @@ static const char *light_sleep(void)
     if (s_wake_at > now && (uint64_t)(s_wake_at - now) * 1000000ULL < us) us = (uint64_t)(s_wake_at - now) * 1000000ULL;
     else if (s_wake_at && s_wake_at <= now) us = 1000;
     esp_sleep_enable_timer_wakeup(us);
+    Serial.printf("event lsleep in %lums axp=%d bma=%d\n", (unsigned long)(us / 1000), digitalRead(PIN_AXP_INT),
+                  digitalRead(PIN_BMA_INT));
     Serial.flush();
     s_light_sleeps++;
     guard_feed();
     guard_crumb(KG_CRUMB_PRE_SLEEP);
+    guard_suspend(true);
     esp_light_sleep_start();
-    guard_feed();
+    guard_suspend(false);
     guard_crumb(KG_CRUMB_POST_SLEEP);
     /* gpio_wakeup_disable() remet le type d'interruption à « aucune » : sans cette
      * restauration, après un premier sommeil léger le bouton et le poignet ne réveillent
@@ -281,6 +284,8 @@ static const char *light_sleep(void)
     gpio_wakeup_disable((gpio_num_t)PIN_BMA_INT);
     gpio_set_intr_type((gpio_num_t)PIN_AXP_INT, GPIO_INTR_NEGEDGE);
     gpio_set_intr_type((gpio_num_t)PIN_BMA_INT, GPIO_INTR_POSEDGE);
+    Serial.printf("event lsleep out cause=%d axp=%d bma=%d\n", (int)esp_sleep_get_wakeup_cause(),
+                  digitalRead(PIN_AXP_INT), digitalRead(PIN_BMA_INT));
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) return nullptr;
     if (digitalRead(PIN_AXP_INT) == LOW) s_axp_irq = true;
     if (digitalRead(PIN_BMA_INT) == HIGH) s_bma_irq = true;
@@ -327,7 +332,11 @@ static void usb_debounce(void)
     if (raw != s_usb_stable && millis() - s_usb_change_ms >= 3000) s_usb_stable = raw;
 }
 
-bool power_usb_stable(void) { return s_usb_stable; }
+/* Test : simule la batterie sur USB (Wi-Fi coupé, sommeil léger actif). */
+static bool s_batt_sim;
+void power_battery_sim(bool on) { s_batt_sim = on; }
+
+bool power_usb_stable(void) { return s_usb_stable && !s_batt_sim; }
 
 void power_loop(void)
 {
@@ -349,7 +358,7 @@ void power_loop(void)
     }
 
     if (!s_screen_on) {
-        if (s_usb_stable || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger sur USB ni Wi-Fi allumé */
+        if (power_usb_stable() || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger sur USB ni Wi-Fi allumé */
             set_cpu_mhz(80);
         } else {
             const char *r = light_sleep();

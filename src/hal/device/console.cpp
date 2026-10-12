@@ -11,6 +11,7 @@
  *   app <nom>   ouvre une app (chrono, timer, alarms, steps, settings)
  *   ring <alarm|timer>  écran d'alerte + sonnerie (test)
  *   timer <s>   lance le minuteur (test des échéances)
+ *   battsim <0|1>  simule la batterie sur USB (test du sommeil léger)
  *   beep        bip court (test du haut-parleur)
  *   egg         déclenche la décharge du cadran Circuits temporels
  *   coredump [erase]  résumé du dernier plantage (et effacement)
@@ -224,6 +225,9 @@ static void run(char *cmd)
         model_timer_set(1000u * atoi(cmd + 6));
         model_timer_start_pause();
         s_out->println("ok");
+    } else if (!strncmp(cmd, "battsim ", 8)) {
+        power_battery_sim(atoi(cmd + 8));
+        s_out->println("ok (console série seulement : le Wi-Fi va se couper)");
     } else if (!strcmp(cmd, "beep")) {
         static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
         hal_tones(t, 3);

@@ -65,11 +65,13 @@ enum {
 };
 void guard_init(void);
 void guard_feed(void);
+void guard_suspend(bool off);
 void guard_crumb(uint32_t id);
 const char *guard_report(char *buf, size_t n);
 
 /* USB stable (anti-rebond 3 s) : base des décisions Wi-Fi et sommeil léger. */
 bool power_usb_stable(void);
+void power_battery_sim(bool on);
 
 void console_poll(void);
 void console_tcp_enable(bool on);
