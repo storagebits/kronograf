@@ -28,3 +28,5 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D9. Puce :** ESP32-D0WDQ6 rev v1.0, quartz 40 MHz, flash Winbond 16 Mo. Compatible V1/V2 (la V3 embarque normalement une ESP32 rev3) ; build V1 en premier, confirmé par le scan I²C et l'écran.
 
 **D10. Port série :** `/dev/cu.usbserial-*` (pilote Apple), pas `/dev/cu.SLAB_USBtoUART` (pilote Silicon Labs, échecs répétés). Téléversement à 230 400 bauds.
+
+**D11. Premier flash (Tranche 0) vérifié.** Démarrage propre ; scan I²C : AXP202, PCF8563, BMA423, FT6336 présents. PSRAM 4 Mo. `status` : heap interne 74 % libre (222 Ko / 298 Ko, budget ≥ 30 %), PSRAM 4,19 Mo libres, LVGL 18 %. RTC avec bit VL levé (heure non fiable) → réglage NTP en Tranche 1. Capture série montre = simulateur (`docs/screens/{sim,device}/t0-diag.png`). En charge, la valeur batterie passe au vert au lieu d'ajouter « Charge · » (débordait sur l'heure, vu sur la capture montre).

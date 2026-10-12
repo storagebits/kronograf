@@ -127,6 +127,10 @@ void ui_diag_update(void)
     if (b.percent < 0)
         lv_label_set_text(s_batt, "Batterie ?");
     else
-        lv_label_set_text_fmt(s_batt, "%s%d %%  %d,%02d V", b.charging ? "Charge · " : "",
-                              b.percent, b.millivolts / 1000, (b.millivolts % 1000) / 10);
+    {
+        /* En charge : la valeur passe au vert plutôt que d'allonger le texte. */
+        lv_obj_set_style_text_color(s_batt, b.charging ? KG_C_OK : KG_C_TEXT, 0);
+        lv_label_set_text_fmt(s_batt, "%d %%  %d,%02d V", b.percent, b.millivolts / 1000,
+                              (b.millivolts % 1000) / 10);
+    }
 }
