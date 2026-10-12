@@ -122,6 +122,7 @@ void hal_device_init(void)
         s_pmu.enableBattDetection();
         s_pmu.enableBattVoltageMeasure();
         s_pmu.enableVbusVoltageMeasure();
+        s_pmu.enableAdcChannel(0x40 | 0x04); /* ADC_EN1 : courant batterie (b6) et VBUS (b2) — mesures seulement */
         s_pmu.setChargingLedMode(XPOWERS_CHG_LED_OFF);
     } else {
         s_inv.pmu = false;
@@ -200,3 +201,7 @@ uint32_t pmu_read_irq(void)
     s_pmu.clearIrqStatus();
     return what;
 }
+
+/* Courant de décharge batterie en mA (0 sur USB) : base des estimations d'autonomie. */
+float pmu_discharge_ma(void) { return s_inv.pmu ? s_pmu.getBattDischargeCurrent() : 0; }
+float pmu_vbus_ma(void) { return s_inv.pmu ? s_pmu.getVbusCurrent() : 0; }

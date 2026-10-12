@@ -28,6 +28,22 @@ static lv_disp_drv_t s_drv;
 static lv_disp_draw_buf_t s_draw_buf;
 
 static uint32_t s_frames, s_fps_t0;
+static uint32_t s_mon_time, s_mon_px, s_mon_n;
+
+/* Appelé par LVGL après chaque rafraîchissement : durée (rendu + envoi) et surface. */
+static void monitor_cb(lv_disp_drv_t *, uint32_t time, uint32_t px)
+{
+    s_mon_time += time;
+    s_mon_px += px;
+    s_mon_n++;
+}
+
+void display_frame_stats(float *ms, uint32_t *px)
+{
+    *ms = s_mon_n ? (float)s_mon_time / s_mon_n : 0;
+    *px = s_mon_n ? s_mon_px / s_mon_n : 0;
+    s_mon_time = s_mon_px = s_mon_n = 0;
+}
 static float s_fps;
 
 static bool on_trans_done(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t *, void *ctx)
@@ -96,6 +112,7 @@ void display_init(void)
     s_drv.ver_res = H;
     s_drv.flush_cb = flush_cb;
     s_drv.draw_buf = &s_draw_buf;
+    s_drv.monitor_cb = monitor_cb;
     lv_disp_drv_register(&s_drv);
     s_fps_t0 = millis();
 }

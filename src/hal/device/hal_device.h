@@ -9,6 +9,8 @@ void hal_device_init(void);
 
 void display_init(void);
 float display_fps(void);
+/* Temps moyen de rendu + envoi d'une image (ms) et pixels redessinés par image. */
+void display_frame_stats(float *ms, uint32_t *px);
 void display_test_pattern(void);
 
 void touch_init(void);
@@ -23,6 +25,8 @@ void rtc_from_system(void);
 void pmu_enable_button_irq(void);
 void pmu_clear_irq(void);
 uint32_t pmu_read_irq(void);
+float pmu_discharge_ma(void);
+float pmu_vbus_ma(void);
 
 /* Écran */
 void display_sleep(bool sleep);

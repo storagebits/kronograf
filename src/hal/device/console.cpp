@@ -39,7 +39,12 @@ static void cmd_status(void)
     Serial.printf("psram free=%u/%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
                   (unsigned)heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
     Serial.printf("lvgl_mem used=%u%% frag=%u%%\n", lv.used_pct, lv.frag_pct);
-    Serial.printf("fps=%.1f cpu=%luMHz\n", display_fps(), (unsigned long)getCpuFrequencyMhz());
+    float frame_ms;
+    uint32_t frame_px;
+    display_frame_stats(&frame_ms, &frame_px);
+    Serial.printf("fps=%.1f frame=%.1fms px/frame=%lu cpu=%luMHz\n", display_fps(), frame_ms,
+                  (unsigned long)frame_px, (unsigned long)getCpuFrequencyMhz());
+    Serial.printf("current batt_discharge=%.1fmA vbus=%.1fmA\n", pmu_discharge_ma(), pmu_vbus_ma());
     Serial.printf("battery=%d%% %dmV charging=%d usb=%d\n", b.percent, b.millivolts, b.charging, b.usb);
     Serial.printf("screen=%s wake=%s steps=%lu\n", power_screen_on() ? "on" : "off", power_wake_reason(),
                   (unsigned long)hal_steps_today());
