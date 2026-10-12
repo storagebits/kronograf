@@ -1,0 +1,8 @@
+.pio/
+build/
+sim/build/
+backups/*.bin
+include/secrets.h
+.DS_Store
+.vscode/
+__pycache__/
