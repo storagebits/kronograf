@@ -16,6 +16,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_sntp.h>
 #include <esp_task_wdt.h>
+#include <mbedtls/platform.h>
 
 #ifndef KG_WORKSHOP
 #define KG_WORKSHOP 1
@@ -64,6 +65,7 @@ static kg_bus_t s_bus;
 static const char *volatile s_wx_status = "Pas encore de relevé";
 static const char *volatile s_bus_status = "Pas encore de relevé";
 static volatile bool s_wx_busy, s_bus_busy;
+static volatile int s_bus_err; /* dernier code d'erreur HTTP du bus (diagnostic console) */
 
 static void do_ntp(void)
 {
@@ -188,7 +190,8 @@ static void do_bus(void)
         s_bus_status = code == 401 || code == 403 ? "Clé STM refusée"
                        : code < 0                 ? "STM injoignable"
                                                   : "STM : erreur du service";
-        Serial.printf("event bus erreur %d\n", code);
+        Serial.printf("event bus erreur %d (%s)\n", code, HTTPClient::errorToString(code).c_str());
+        s_bus_err = code;
     }
     (void)heap_min;
     http.end();
@@ -262,8 +265,21 @@ static void net_request(uint32_t jobs)
     xTaskCreatePinnedToCore(net_task, "kg_net", 8192, nullptr, 1, &s_task, 0);
 }
 
+/* Tampons TLS (≈ 2 × 16 Ko par connexion) en PSRAM : en mémoire interne, Wi-Fi + BLE +
+ * TLS ne laissaient que 6 Ko libres pendant le téléchargement STM. Le chiffrement matériel
+ * de l'ESP32 n'utilise pas de DMA : la PSRAM convient. Repli en interne si la PSRAM manque. */
+static void *tls_calloc(size_t n, size_t size)
+{
+    if (n * size >= 4096) { /* gros tampons d'enregistrement seulement */
+        void *p = heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (p) return p;
+    }
+    return heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
 void net_start_time_sync(void)
 {
+    mbedtls_platform_set_calloc_free(tls_calloc, free);
     load_credentials();
     if (!have_wifi()) {
         s_status = "pas de Wi-Fi configuré";
@@ -354,6 +370,8 @@ void hal_bus_refresh(uint32_t max_age_s)
     net_request(JOB_BUS);
     if (!s_task_running) s_bus_busy = false;
 }
+
+int net_bus_last_error(void) { return s_bus_err; }
 
 const char *hal_bus_status(void)
 {

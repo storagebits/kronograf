@@ -56,6 +56,7 @@ void power_counters(uint32_t *wakes, uint32_t *light_sleeps);
 /* Réseau : synchro NTP en tâche de fond si secrets.h fournit un Wi-Fi */
 void net_start_time_sync(void);
 const char *net_status(void);
+int net_bus_last_error(void);
 
 /* Garde-fous (guard.cpp) : chien de garde RTC et miettes de pain en mémoire RTC. */
 enum {

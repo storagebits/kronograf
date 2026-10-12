@@ -243,7 +243,8 @@ static void run(char *cmd)
         if (cmd[3]) hal_bus_refresh(0);
         kg_bus_t bus;
         const char *st = hal_bus_status();
-        s_out->printf("bus : arrêts « %s »%s%s\n", hal_bus_stops(), st ? " — " : "", st ? st : "");
+        s_out->printf("bus : arrêts « %s »%s%s (dernière erreur HTTP %d)\n", hal_bus_stops(), st ? " — " : "", st ? st : "",
+                      net_bus_last_error());
         if (hal_bus(&bus)) {
             time_t now = time(nullptr);
             for (int i = 0; i < bus.n; i++)

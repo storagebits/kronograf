@@ -253,7 +253,7 @@ void ble_start(void)
 {
     s_events = xEventGroupCreate();
     s_uids = xQueueCreate(24, sizeof(uint64_t));
-    xTaskCreatePinnedToCore(ancs_task, "kg_ancs", 6144, nullptr, 2, &s_task, 0);
+    xTaskCreatePinnedToCore(ancs_task, "kg_ancs", 5120, nullptr, 2, &s_task, 0);
     s_enabled = hal_setting_get("ble", 1) != 0;
     if (s_enabled) ble_up();
 }

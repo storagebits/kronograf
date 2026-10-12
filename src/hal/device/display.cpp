@@ -18,7 +18,7 @@
 #endif
 
 static constexpr int W = 240, H = 240;
-static constexpr int BUF_LINES = 40;
+static constexpr int BUF_LINES = 30; /* 2 × 14,4 Ko de DMA interne : marge pour BLE + Wi-Fi (D44) */
 /* La RAM de l'ST7789 fait 240×320 ; en rotation 180° l'image visible commence à la ligne 80. */
 static constexpr int GAP_Y = 80;
 
