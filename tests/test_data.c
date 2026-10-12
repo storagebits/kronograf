@@ -1,9 +1,10 @@
 /*
  * Tests hôte des analyseurs de données (macOS) :
- *   cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_weather.c src/data/kg_bus.c -o /tmp/kg_test
+ *   cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -o /tmp/kg_test
  *   /tmp/kg_test tests/data/openmeteo-montreal.json [tripUpdates.pb arrêts]
  * Le flux STM (~1 Mo, téléchargé avec la clé) n'est pas versionné.
  */
+#include "data/kg_ancs.h"
 #include "data/kg_bus.h"
 #include "data/kg_weather.h"
 #include <assert.h>
@@ -25,8 +26,47 @@ static char *slurp(const char *path, size_t *len)
     return b;
 }
 
+/* ANCS : réponse d'attributs synthétique, découpée en trames de 20 octets comme en BLE. */
+static void test_ancs(void)
+{
+    uint8_t req[32];
+    assert(kg_ancs_build_request(req, sizeof req, 0x01020304) == 13 && req[1] == 4 && req[4] == 1);
+    kg_ancs_event_t ev;
+    const uint8_t ns[8] = {0, KG_ANCS_FLAG_IMPORTANT, KG_CAT_SOCIAL, 1, 7, 0, 0, 0};
+    assert(kg_ancs_parse_event(ns, 8, &ev) && ev.uid == 7 && ev.category == KG_CAT_SOCIAL);
+
+    const char *app = "com.apple.MobileSMS", *title = "Ma\xC3\xAFt\xC3\xA9 \xF0\x9F\x98\x80 Lou",
+               *msg = "On se voit \xC3\xA0 18 h ?\n\n\xE2\x80\x9COK\xE2\x80\x9D \xC5\x93uvre \xE2\x82\xAC", *date = "20261012T143005";
+    uint8_t resp[256];
+    size_t n = 0;
+    resp[n++] = 0;
+    resp[n++] = 7, resp[n++] = 0, resp[n++] = 0, resp[n++] = 0;
+    const char *vals[] = {app, title, msg, date};
+    const uint8_t ids[] = {0, 1, 3, 5};
+    for (int i = 0; i < 4; i++) {
+        size_t l = strlen(vals[i]);
+        resp[n++] = ids[i], resp[n++] = (uint8_t)l, resp[n++] = 0;
+        memcpy(resp + n, vals[i], l);
+        n += l;
+    }
+    kg_ancs_rx_t rx;
+    kg_ancs_rx_reset(&rx);
+    kg_notif_t out;
+    int done = 0;
+    for (size_t off = 0; off < n; off += 20) done += kg_ancs_rx_feed(&rx, resp + off, off + 20 > n ? n - off : 20, &out);
+    assert(done == 1 && out.uid == 7);
+    char buf[40];
+    printf("ancs : [%s] « %s » « %s » %s\n", kg_ancs_app_name(out.app, buf, sizeof buf), out.title, out.message, out.date);
+    assert(!strcmp(out.title, "Maïté Lou"));
+    assert(!strcmp(kg_ancs_app_name("com.example.superApp", buf, sizeof buf), "SuperApp"));
+    char tr[8];
+    kg_text_sanitize(tr, sizeof tr, "abcd\xC3\xA9\xC3\xA9", 8); /* jamais de coupure au milieu d'un caractère */
+    assert(!strcmp(tr, "abcd\xC3\xA9"));
+}
+
 int main(int argc, char **argv)
 {
+    test_ancs();
     size_t len;
     char *json = slurp(argv[1], &len);
     assert(json);

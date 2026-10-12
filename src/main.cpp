@@ -35,6 +35,8 @@ void setup()
                   (unsigned long)(t1 - t0), (unsigned long)(millis() - t1));
     hal_brightness_scale(100); /* allume au réglage mémorisé, une fois la première image envoyée */
     net_start_time_sync();
+    if (guard_safe_mode()) Serial.println("mode sans échec : plantages en série au démarrage, BLE non démarré");
+    else ble_start();
 
     const kg_inventory_t *inv = hal_inventory();
     Serial.printf("Kronograf prêt : V%d pmu=%d rtc=%d accel=%d touch=%d psram=%luKo flash=%luMo\n",

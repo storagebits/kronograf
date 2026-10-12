@@ -355,6 +355,7 @@ void power_loop(void)
     /* Échéance d'une alarme ou d'un minuteur : l'UI (qui ne tourne pas écran éteint)
      * doit reprendre la main pour sonner. On interroge le modèle directement : un
      * minuteur lancé écran éteint (ou juste avant l'extinction) doit aussi réveiller. */
+    if (ble_take_wake() && !s_screen_on) screen_on("notification");
     if (!s_screen_on) {
         s_wake_at = model_next_event_time();
         if (s_wake_at && time(nullptr) >= s_wake_at) screen_on("échéance");
@@ -366,7 +367,10 @@ void power_loop(void)
     }
 
     if (!s_screen_on) {
-        if (power_usb_stable() || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger sur USB ni Wi-Fi allumé */
+        /* Pas de sommeil léger sur USB, Wi-Fi allumé, ni BLE actif : sur cette carte, le BLE
+         * prend son horloge basse consommation sur le quartz principal (pas de 32 kHz), ce
+         * qui interdit le sommeil léger. On reste en « modem sleep » à 80 MHz. */
+        if (power_usb_stable() || WiFi.getMode() != WIFI_OFF || ble_active()) {
             set_cpu_mhz(80);
         } else {
             const char *r = light_sleep();

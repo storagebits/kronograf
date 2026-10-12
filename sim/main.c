@@ -9,6 +9,7 @@
 #include "../src/ui/ui.h"
 #include "../src/ui/faces.h"
 #include "../src/ui/nav.h"
+#include "../src/ui/notif.h"
 #include "../src/ui/model.h"
 #include "../src/hal/hal.h"
 #include "../src/ui/theme.h"
@@ -102,6 +103,7 @@ int main(int argc, char **argv)
         }
         const char *app = getenv("KG_APP");
         if (app && !strcmp(app, "launcher")) ui_nav_open_launcher();
+        else if (app && !strcmp(app, "notifs")) ui_notif_open_list();
         else if (app) ui_nav_open_app(app);
         if (getenv("KG_ALERT")) ui_nav_test_alert(!strcmp(getenv("KG_ALERT"), "alarm"));
     }

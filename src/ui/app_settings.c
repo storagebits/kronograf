@@ -1,6 +1,7 @@
 /*
  * App Réglages : luminosité, mise en veille, cadran par défaut, format 24 h, Wi-Fi
- * (scan + saisie du mot de passe au clavier tactile), arrêts STM suivis, à propos.
+ * (scan + saisie du mot de passe au clavier tactile), notifications iPhone (BLE), arrêts
+ * STM suivis, à propos.
  */
 #include "nav.h"
 #include "faces.h"
@@ -11,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_value;
+static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_value, *s_ble_sw, *s_ble_state;
 static lv_obj_t *s_timeout_btn[4], *s_face_btn[3];
 static const uint16_t TIMEOUTS[4] = {5, 10, 15, 30};
 
@@ -69,6 +70,11 @@ static void refresh(void)
     const char *ssid = hal_wifi_ssid();
     lv_label_set_text_fmt(s_wifi_value, "%s\n%s", ssid[0] ? ssid : "Aucun réseau", hal_net_status());
 
+    if (hal_ble_enabled()) lv_obj_add_state(s_ble_sw, LV_STATE_CHECKED);
+    else lv_obj_clear_state(s_ble_sw, LV_STATE_CHECKED);
+    static const char *const ST[] = {"Désactivées", "En attente de l'iPhone", "Appairage…", "Connexion…", "iPhone connecté"};
+    lv_label_set_text(s_ble_state, ST[hal_ble_state()]);
+
     if (s_bus_value) {
         const char *stops = hal_bus_stops();
         lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "Aucun arrêt choisi");
@@ -102,6 +108,20 @@ static void fmt24_cb(lv_event_t *e)
 {
     ui_set_fmt24(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
     kit_tick();
+}
+
+static void ble_cb(lv_event_t *e)
+{
+    hal_ble_enable(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
+    kit_tick();
+    refresh();
+}
+
+static void forget_cb(lv_event_t *e)
+{
+    (void)e;
+    hal_ble_forget();
+    refresh();
 }
 
 /* ------------------------------------------------------------------ Wi-Fi */
@@ -352,6 +372,22 @@ static lv_obj_t *create(void)
     lv_obj_set_style_bg_color(s_fmt24, KG_C_ACCENT, LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(s_fmt24, KG_C_HAND, LV_PART_KNOB);
     lv_obj_add_event_cb(s_fmt24, fmt24_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    section("NOTIFICATIONS IPHONE");
+    r = row(52);
+    l = kit_label(r, &kg_font_label_20, KG_C_TEXT, "Bluetooth");
+    lv_obj_align(l, LV_ALIGN_TOP_LEFT, 14, 5);
+    s_ble_state = kit_label(r, &kg_font_text_16, KG_C_TEXT_DIM, "");
+    lv_obj_align(s_ble_state, LV_ALIGN_BOTTOM_LEFT, 14, -4);
+    s_ble_sw = lv_switch_create(r);
+    lv_obj_set_size(s_ble_sw, 50, 26);
+    lv_obj_align(s_ble_sw, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_set_style_bg_color(s_ble_sw, KG_C_BTN, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_ble_sw, KG_C_ACCENT, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(s_ble_sw, KG_C_HAND, LV_PART_KNOB);
+    lv_obj_add_event_cb(s_ble_sw, ble_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_t *forget = kit_button(s_list, "Oublier l'iPhone", false, 220, 36, forget_cb, NULL);
+    lv_obj_set_style_text_font(lv_obj_get_child(forget, 0), &kg_font_text_16, 0);
 
     section("WI-FI");
     r = row(52);

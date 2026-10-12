@@ -66,6 +66,7 @@ enum {
 void guard_init(void);
 void guard_feed(void);
 void guard_suspend(bool off);
+bool guard_safe_mode(void);
 void guard_crumb(uint32_t id);
 const char *guard_report(char *buf, size_t n);
 
@@ -78,3 +79,8 @@ void console_tcp_enable(bool on);
 
 /* Mode atelier : sur USB, Wi-Fi + OTA + console TCP (cf. DECISIONS). */
 void net_workshop_loop(void);
+
+/* BLE / notifications iPhone (ble.cpp) */
+void ble_start(void);
+bool ble_active(void);     /* contrôleur allumé : pas de sommeil léger (pas de quartz 32 kHz) */
+bool ble_take_wake(void);  /* une notification ou un appairage demande l'écran */

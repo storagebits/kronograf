@@ -17,7 +17,7 @@
 static constexpr uint32_t MAGIC = 0x4B47524Bu; /* « KGRK » */
 static constexpr uint32_t RWDT_MS = 90000;     /* > sommeil léger max (60 s) avec marge pour l'oscillateur RC */
 
-static RTC_NOINIT_ATTR uint32_t r_magic, r_crumb, r_prev, r_uptime_s;
+static RTC_NOINIT_ATTR uint32_t r_magic, r_crumb, r_prev, r_uptime_s, r_crash_boots;
 static uint32_t s_last_crumb = KG_CRUMB_NONE, s_last_prev = KG_CRUMB_NONE, s_last_uptime;
 static bool s_had_hang;
 
@@ -50,13 +50,24 @@ void guard_init(void)
         s_last_uptime = r_uptime_s;
         s_had_hang = why == ESP_RST_WDT || why == ESP_RST_TASK_WDT || why == ESP_RST_INT_WDT || why == ESP_RST_PANIC;
     }
+    /* Plantages en série dès le démarrage (< 60 s) : au 3e, mode sans échec. */
+    bool early_crash = r_magic == MAGIC && s_had_hang && s_last_uptime < 60;
+    r_crash_boots = early_crash ? r_crash_boots + 1 : 0;
     r_magic = MAGIC;
     r_crumb = r_prev = KG_CRUMB_NONE;
 
     arm();
 }
 
-void guard_feed(void) { rtc_wdt_feed(); }
+void guard_feed(void)
+{
+    rtc_wdt_feed();
+    if (r_crash_boots && millis() > 60000) r_crash_boots = 0; /* une minute stable : on oublie */
+}
+
+/* Mode sans échec : les modules récents ou optionnels (BLE) ne démarrent pas, pour que la
+ * montre reste joignable (Wi-Fi atelier, OTA) même si l'un d'eux plante au démarrage. */
+bool guard_safe_mode(void) { return r_crash_boots >= 2; }
 
 /* Coupe le RWDT autour de esp_light_sleep_start() : on laisse le sommeil léger dans
  * l'état exact que l'IDF attend (il gère lui-même le RTC WDT à la sortie de sommeil). */

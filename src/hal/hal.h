@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+#include "../data/kg_ancs.h"
 #include "../data/kg_bus.h"
 #include "../data/kg_weather.h"
 
@@ -118,6 +119,19 @@ void hal_bus_set_stops(const char *stops);
 bool hal_bus(kg_bus_t *out);
 void hal_bus_refresh(uint32_t max_age_s);
 const char *hal_bus_status(void);
+
+/* Notifications iPhone (BLE, ANCS). L'iPhone se connecte et s'appaire depuis Réglages →
+ * Bluetooth ; le code d'appairage s'affiche sur la montre. */
+typedef enum { KG_BLE_OFF, KG_BLE_WAITING, KG_BLE_PAIRING, KG_BLE_CONNECTED, KG_BLE_READY } kg_ble_state_t;
+kg_ble_state_t hal_ble_state(void);
+uint32_t hal_ble_passkey(void);  /* code à 6 chiffres, valable en KG_BLE_PAIRING */
+bool hal_ble_enabled(void);
+void hal_ble_enable(bool on);    /* persistant */
+void hal_ble_forget(void);       /* oublie l'iPhone appairé */
+int hal_notif_count(void);
+bool hal_notif_get(int i, kg_notif_t *out); /* 0 = la plus récente */
+uint32_t hal_notif_seq(void);    /* +1 à chaque nouvelle notification à signaler */
+void hal_notif_dismiss(uint32_t uid); /* retire de la montre et efface sur l'iPhone */
 
 #ifdef __cplusplus
 }

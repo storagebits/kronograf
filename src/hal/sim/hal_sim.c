@@ -7,6 +7,7 @@
  *   KG_REV=1|2|3         révision simulée
  */
 #include "../hal.h"
+#include "kg_mem.h"
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,6 +108,8 @@ void *hal_alloc_large(size_t bytes)
     if (p) memset(p, 0xA5, bytes);
     return p;
 }
+
+void *kg_lv_pool_alloc(size_t bytes) { return malloc(bytes); }
 
 bool hal_time_valid(void) { return getenv("KG_NOTIME") == NULL; }
 
@@ -227,4 +230,60 @@ const char *hal_bus_status(void)
 {
     if (!hal_bus_available()) return "Clé STM absente (secrets.h)";
     return hal_bus_stops()[0] ? NULL : "Aucun arrêt choisi";
+}
+
+/* BLE / notifications : KG_BLE=off|waiting|pairing|ready (défaut ready), KG_NOTIF=nombre
+ * de notifications factices (défaut 3), KG_NOTIF_CAT pour la première. */
+static uint32_t s_dismissed; /* masque des notifications effacées */
+static bool s_ble_on = true;
+
+kg_ble_state_t hal_ble_state(void)
+{
+    const char *e = getenv("KG_BLE");
+    if (!s_ble_on || (e && !strcmp(e, "off"))) return KG_BLE_OFF;
+    if (e && !strcmp(e, "waiting")) return KG_BLE_WAITING;
+    if (e && !strcmp(e, "pairing")) return KG_BLE_PAIRING;
+    return KG_BLE_READY;
+}
+uint32_t hal_ble_passkey(void) { return 482915; }
+bool hal_ble_enabled(void) { return s_ble_on && hal_ble_state() != KG_BLE_OFF; }
+void hal_ble_enable(bool on) { s_ble_on = on; }
+void hal_ble_forget(void) {}
+
+static const kg_notif_t DEMO_NOTIFS[] = {
+    {101, KG_CAT_SOCIAL, "com.apple.MobileSMS", "Camille", "On se retrouve au marché Jean-Talon à 18 h ? J'apporte les croissants.", "20261012T171205"},
+    {102, KG_CAT_EMAIL, "com.apple.mobilemail", "STM — Info-service", "Ligne 24 : détour rue Sherbrooke jusqu'à nouvel ordre.", "20261012T164010"},
+    {103, KG_CAT_SCHEDULE, "com.apple.mobilecal", "Dentiste", "Demain à 9 h 30 · 1250 rue Sainte-Catherine", "20261012T150000"},
+    {104, KG_CAT_CALL, "com.apple.mobilephone", "Maman", "Appel entrant", "20261012T171500"},
+};
+
+int hal_notif_count(void)
+{
+    int n = env_int("KG_NOTIF", 3), k = 0;
+    for (int i = 0; i < n && i < 4; i++)
+        if (!(s_dismissed & 1u << i)) k++;
+    return hal_ble_state() == KG_BLE_OFF ? 0 : k;
+}
+
+bool hal_notif_get(int i, kg_notif_t *out)
+{
+    int n = env_int("KG_NOTIF", 3);
+    for (int k = 0; k < n && k < 4; k++) {
+        if (s_dismissed & 1u << k) continue;
+        if (i-- == 0) {
+            *out = DEMO_NOTIFS[k];
+            if (k == 0 && getenv("KG_NOTIF_CAT")) out->category = (uint8_t)env_int("KG_NOTIF_CAT", 4);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Une « nouvelle » notification arrive peu après le démarrage si KG_NOTIF_ALERT=1. */
+uint32_t hal_notif_seq(void) { return SDL_GetTicks() > 150 ? (uint32_t)env_int("KG_NOTIF_ALERT", 0) : 0; }
+
+void hal_notif_dismiss(uint32_t uid)
+{
+    for (int k = 0; k < 4; k++)
+        if (DEMO_NOTIFS[k].uid == uid) s_dismissed |= 1u << k;
 }

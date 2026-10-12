@@ -167,6 +167,8 @@ void hal_backlight(uint8_t level) { ledcWrite(BL_CHANNEL, level); }
 
 void *hal_alloc_large(size_t bytes) { return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM); }
 
+extern "C" void *kg_lv_pool_alloc(size_t bytes) { return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }
+
 void pmu_enable_button_irq(void)
 {
     if (!s_inv.pmu) return;

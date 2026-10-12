@@ -2,6 +2,7 @@
 #include "faces.h"
 #include "kit.h"
 #include "model.h"
+#include "notif.h"
 #include "theme.h"
 #include "transition.h"
 #include "fonts/kg_fonts.h"
@@ -327,21 +328,27 @@ static void shell_tick(lv_timer_t *t)
     kg_event_t ev = model_poll();
     if (ev == KG_EVT_ALARM) show_alert(true);
     else if (ev == KG_EVT_TIMER_DONE) show_alert(false);
+    else if (!s_return_to) ui_notif_poll(); /* pas de carte par-dessus une alarme qui sonne */
     hal_schedule_wakeup(model_next_event_time());
 }
 
 static void face_gesture(lv_event_t *e)
 {
     (void)e;
-    if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_TOP) {
+    lv_dir_t d = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (d == LV_DIR_TOP) {
         lv_indev_wait_release(lv_indev_get_act());
         ui_nav_open_launcher();
+    } else if (d == LV_DIR_BOTTOM) {
+        lv_indev_wait_release(lv_indev_get_act());
+        ui_notif_open_list();
     }
 }
 
 void ui_nav_init(void)
 {
     model_alarms_load();
+    ui_notif_init();
     for (int i = 0; i < ui_faces_count(); i++) lv_obj_add_event_cb(ui_faces_screen(i), face_gesture, LV_EVENT_GESTURE, NULL);
     lv_timer_create(shell_tick, 250, NULL);
 }

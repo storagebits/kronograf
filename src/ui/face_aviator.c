@@ -48,7 +48,7 @@ static lv_obj_t *s_scr, *s_canvas;
 static lv_color_t *s_bg;
 static hand_t s_hour, s_min, s_sec, s_batt, s_chrono, s_steps;
 static lv_obj_t *s_counterweight;
-static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint, *s_wx_icon, *s_wx_temp;
+static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint, *s_wx_icon, *s_wx_temp, *s_notif;
 static float s_bezel_deg;      /* rotation de la lunette */
 static lv_coord_t s_drag_last;
 static bool s_drag_on_bezel;   /* le geste en cours appartient à la lunette */
@@ -395,6 +395,16 @@ static void update(lv_timer_t *t)
             lv_obj_add_flag(s_wx_temp, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    /* Pastille des notifications iPhone (coin bas droit) : glisser vers le bas pour les lire. */
+    if (n % 8 == 0) {
+        int count = hal_notif_count();
+        if (count) {
+            lv_label_set_text_fmt(s_notif, "%d", count);
+            lv_obj_clear_flag(s_notif, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(s_notif, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 
     if (now.tm_mday != s_last_mday) {
         s_last_mday = now.tm_mday;
@@ -486,6 +496,17 @@ static lv_obj_t *create(void)
     lv_obj_set_style_text_color(s_wx_temp, KG_C_TEXT_DIM, 0);
     lv_obj_set_pos(s_wx_temp, 23, 220);
     lv_obj_add_flag(s_wx_temp, LV_OBJ_FLAG_HIDDEN);
+
+    s_notif = lv_label_create(s_scr);
+    lv_obj_set_style_text_font(s_notif, &kg_font_text_16, 0);
+    lv_obj_set_style_text_color(s_notif, KG_C_BG, 0);
+    lv_obj_set_style_bg_color(s_notif, KG_C_ACCENT, 0);
+    lv_obj_set_style_bg_opa(s_notif, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_notif, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_text_align(s_notif, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_size(s_notif, 20, 20);
+    lv_obj_align(s_notif, LV_ALIGN_BOTTOM_RIGHT, -4, -2);
+    lv_obj_add_flag(s_notif, LV_OBJ_FLAG_HIDDEN);
 
     /* Petites aiguilles des sous-cadrans, puis leurs chapeaux. */
     hand_init(&s_batt, s_scr, SUB_BATT, 4, 17, 2, KG_C_HAND, 0, 0, 0);

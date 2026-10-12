@@ -249,6 +249,18 @@ static void run(char *cmd)
             for (int i = 0; i < bus.n; i++)
                 s_out->printf("  %s à l'arrêt %s dans %ld s\n", bus.deps[i].route, bus.deps[i].stop, (long)(bus.deps[i].t - now));
         }
+    } else if (!strcmp(cmd, "ble") || !strncmp(cmd, "ble ", 4)) {
+        if (!strcmp(cmd, "ble on")) hal_ble_enable(true);
+        else if (!strcmp(cmd, "ble off")) hal_ble_enable(false);
+        else if (!strcmp(cmd, "ble oublier")) hal_ble_forget();
+        static const char *const ST[] = {"coupé", "en attente", "appairage", "connecté", "ANCS prêt"};
+        s_out->printf("ble : %s%s, %d notifications, tas interne libre %lu\n", ST[hal_ble_state()],
+                      guard_safe_mode() ? " (mode sans échec)" : "", hal_notif_count(),
+                      (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        for (int i = 0; i < hal_notif_count(); i++) {
+            kg_notif_t n;
+            if (hal_notif_get(i, &n)) s_out->printf("  [%u] %s — %s\n", n.category, n.app, n.title);
+        }
     } else if (!strcmp(cmd, "beep")) {
         static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
         hal_tones(t, 3);
@@ -279,7 +291,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | ble [on|off|oublier] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 
