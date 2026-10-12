@@ -12,6 +12,7 @@
 #include <Wire.h>
 #define XPOWERS_CHIP_AXP202
 #include <XPowersLib.h>
+#include <esp_heap_caps.h>
 #include <sys/time.h>
 
 static kg_inventory_t s_inv;
@@ -150,3 +151,5 @@ void hal_vibrate(uint16_t ms)
     (void)ms;
 #endif
 }
+
+void *hal_alloc_large(size_t bytes) { return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM); }

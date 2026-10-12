@@ -10,6 +10,7 @@
 #include "../src/ui/theme.h"
 #include <SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -78,7 +79,9 @@ int main(int argc, char **argv)
     indev_drv.read_cb = pointer_cb;
     lv_indev_drv_register(&indev_drv);
 
-    lv_scr_load(ui_diag_create());
+    const char *screen = getenv("KG_SCREEN");
+    int diag = screen && !strcmp(screen, "diag");
+    lv_scr_load(diag ? ui_diag_create() : ui_face_aviator_create());
 
     if (shot) {
         lv_refr_now(NULL);
@@ -101,7 +104,7 @@ int main(int argc, char **argv)
             else if (e.type == SDL_MOUSEBUTTONDOWN) s_mouse_down = 1;
             else if (e.type == SDL_MOUSEBUTTONUP) s_mouse_down = 0;
         }
-        if (SDL_GetTicks() - last_update >= 1000) {
+        if (diag && SDL_GetTicks() - last_update >= 1000) {
             last_update = SDL_GetTicks();
             ui_diag_update();
         }

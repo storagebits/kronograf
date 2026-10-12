@@ -6,6 +6,7 @@
  */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <time.h>
 
@@ -49,6 +50,9 @@ kg_battery_t hal_battery(void);
 uint32_t hal_steps_today(void);
 
 void hal_backlight(uint8_t level); /* 0..255 */
+
+/* Gros tampons (images de cadran) : PSRAM sur la montre, malloc en simulateur. */
+void *hal_alloc_large(size_t bytes);
 void hal_vibrate(uint16_t ms);
 
 #ifdef __cplusplus

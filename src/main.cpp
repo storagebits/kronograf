@@ -7,8 +7,6 @@
 #include "ui/ui.h"
 #include <Arduino.h>
 
-static uint32_t s_last_ui_update;
-
 void setup()
 {
     Serial.begin(115200);
@@ -18,8 +16,12 @@ void setup()
     lv_init();
     display_init();
 
-    lv_scr_load(ui_diag_create());
+    uint32_t t0 = millis();
+    lv_scr_load(ui_face_aviator_create());
+    uint32_t t1 = millis();
     lv_refr_now(nullptr);
+    Serial.printf("cadran : rendu du fond %lu ms, première image %lu ms\n",
+                  (unsigned long)(t1 - t0), (unsigned long)(millis() - t1));
     hal_backlight(160); /* allumé seulement une fois la première image envoyée : pas de flash blanc */
 
     const kg_inventory_t *inv = hal_inventory();
@@ -30,11 +32,6 @@ void setup()
 
 void loop()
 {
-    uint32_t now = millis();
-    if (now - s_last_ui_update >= 1000) {
-        s_last_ui_update = now;
-        ui_diag_update();
-    }
     console_poll();
     uint32_t wait = lv_timer_handler();
     vTaskDelay(pdMS_TO_TICKS(wait < 5 ? 1 : (wait > 20 ? 20 : wait)));

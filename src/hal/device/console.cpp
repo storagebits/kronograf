@@ -2,6 +2,7 @@
  * Console série de diagnostic (115200 bauds, une commande par ligne).
  *   status      heap interne / PSRAM, FPS, batterie, uptime, révision
  *   screenshot  capture LVGL de l'écran courant, envoyée en base64 (tools/screenshot.py)
+ *   diag        affiche l'écran de diagnostic de la Tranche 0
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
  *   log <n>     niveau de log ESP (0 = rien … 5 = verbeux)
  *   help
@@ -9,6 +10,7 @@
 #include "../hal.h"
 #include "hal_device.h"
 #include "lvgl.h"
+#include "../../ui/ui.h"
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
@@ -70,14 +72,17 @@ static void run(char *cmd)
 {
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
-    else if (!strcmp(cmd, "lcdtest")) {
+    else if (!strcmp(cmd, "diag")) {
+        lv_scr_load(ui_diag_create());
+        Serial.println("ok");
+    } else if (!strcmp(cmd, "lcdtest")) {
         display_test_pattern();
         Serial.println("ok");
     }
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         Serial.println("ok");
-    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) Serial.println("status | screenshot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) Serial.printf("commande inconnue : %s\n", cmd);
 }
 
