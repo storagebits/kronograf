@@ -257,6 +257,12 @@ static const char *light_sleep(void)
     s_bma.readIrqStatus(); /* libère INT1 avant de s'endormir */
     pmu_clear_irq();
     s_bma_irq = s_axp_irq = false;
+    /* Interruptions GPIO coupées pendant le sommeil : le réveil exige des types « niveau »,
+     * et une interruption niveau encore active au réveil (bouton tenu, INT de l'AXP202
+     * maintenue jusqu'à l'acquittement I²C) se redéclencherait sans fin — tempête qui
+     * fige la montre au premier appui (B3). Le réveil GPIO n'a pas besoin de l'ISR. */
+    gpio_intr_disable((gpio_num_t)PIN_AXP_INT);
+    gpio_intr_disable((gpio_num_t)PIN_BMA_INT);
     gpio_wakeup_enable((gpio_num_t)PIN_AXP_INT, GPIO_INTR_LOW_LEVEL);
     gpio_wakeup_enable((gpio_num_t)PIN_BMA_INT, GPIO_INTR_HIGH_LEVEL);
     esp_sleep_enable_gpio_wakeup();
@@ -284,6 +290,8 @@ static const char *light_sleep(void)
     gpio_wakeup_disable((gpio_num_t)PIN_BMA_INT);
     gpio_set_intr_type((gpio_num_t)PIN_AXP_INT, GPIO_INTR_NEGEDGE);
     gpio_set_intr_type((gpio_num_t)PIN_BMA_INT, GPIO_INTR_POSEDGE);
+    gpio_intr_enable((gpio_num_t)PIN_AXP_INT);
+    if (s_bma_ok) gpio_intr_enable((gpio_num_t)PIN_BMA_INT);
     Serial.printf("event lsleep out cause=%d axp=%d bma=%d\n", (int)esp_sleep_get_wakeup_cause(),
                   digitalRead(PIN_AXP_INT), digitalRead(PIN_BMA_INT));
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) return nullptr;
