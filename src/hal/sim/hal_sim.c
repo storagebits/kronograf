@@ -75,4 +75,11 @@ void hal_backlight(uint8_t level) { (void)level; }
 
 void hal_vibrate(uint16_t ms) { printf("[sim] vibreur %u ms\n", ms); }
 
-void *hal_alloc_large(size_t bytes) { return malloc(bytes); }
+/* Remplie de motif : la PSRAM de la montre n'est pas initialisée, le simulateur ne doit pas
+ * masquer un oubli de remplissage par une mémoire fraîchement mise à zéro. */
+void *hal_alloc_large(size_t bytes)
+{
+    void *p = malloc(bytes);
+    if (p) memset(p, 0xA5, bytes);
+    return p;
+}

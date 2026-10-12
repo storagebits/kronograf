@@ -405,7 +405,7 @@ lv_obj_t *ui_face_aviator_create(void)
     s_bg = hal_alloc_large(LV_CANVAS_BUF_SIZE_TRUE_COLOR(KG_W, KG_H));
     s_canvas = lv_canvas_create(s_scr);
     lv_canvas_set_buffer(s_canvas, s_bg, KG_W, KG_H, LV_IMG_CF_TRUE_COLOR);
-    render_pixels(0, R_OUT);
+    render_pixels(0, 2 * R_OUT); /* toute l'image, coins compris : la PSRAM n'est pas initialisée */
     render_dial_marks();
     render_bezel();
     lv_obj_add_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
