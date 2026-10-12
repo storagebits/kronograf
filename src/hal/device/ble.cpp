@@ -44,6 +44,9 @@ static NimBLERemoteCharacteristic *s_cp;
 /* Diagnostic (console « ble ») : compteurs et dernière étape en échec. */
 static volatile uint32_t d_events, d_requests, d_responses, d_timeouts, d_wfail, d_frames;
 static const char *volatile d_last = "";
+static const char *volatile d_phase = "";
+static volatile uint32_t d_connects, d_secured;
+static volatile int d_reason = -1;
 static volatile uint32_t d_rx_raw; /* notifications reçues au niveau GAP, avant tout routage */
 static volatile uint16_t d_rx_handle, d_ns_handle, d_ds_handle;
 static ble_gap_event_listener s_listener;
@@ -116,6 +119,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
     {
         s_conn = info.getConnHandle();
         s_state = KG_BLE_CONNECTED;
+        d_connects++;
         Serial.printf("event ble connexion %s\n", info.getIdAddress().toString().c_str());
         /* Déjà appairé : le chiffrement reprend avec la clé mémorisée. Sinon : appairage. */
         NimBLEDevice::startSecurity(s_conn);
@@ -127,6 +131,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_cp = nullptr;
         s_state = s_enabled ? KG_BLE_WAITING : KG_BLE_OFF;
         xEventGroupSetBits(s_events, EV_DISCONNECTED);
+        d_reason = reason;
         Serial.printf("event ble déconnexion %d\n", reason);
     }
 
@@ -149,6 +154,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         }
         s_state = KG_BLE_CONNECTED;
         s_passkey = 0;
+        d_secured++;
         xEventGroupSetBits(s_events, EV_SECURED);
     }
 };
@@ -159,12 +165,14 @@ static bool ancs_attach(void)
 {
     NimBLEConnInfo info = s_server->getPeerInfoByHandle(s_conn);
     NimBLEClient *client = s_server->getClient(info);
+    d_phase = "découverte";
     if (!client) {
         d_last = "pas de client GATT";
         return false;
     }
     NimBLERemoteService *svc = client->getService(KG_ANCS_SERVICE);
     if (!svc) {
+        d_last = "service ANCS introuvable";
         Serial.println("event ble pas d'ANCS (pas un iPhone ?)");
         return false;
     }
@@ -176,6 +184,7 @@ static bool ancs_attach(void)
         return false;
     }
     /* Data Source d'abord : les réponses ne doivent pas arriver avant l'abonnement. */
+    d_phase = "abonnement";
     d_ns_handle = ns->getHandle();
     d_ds_handle = ds->getHandle();
     if (!ds->subscribe(true, on_data_source)) {
@@ -209,12 +218,15 @@ static void fetch(uint64_t item)
     kg_ancs_rx_reset(&s_rx);
     xEventGroupClearBits(s_events, EV_RESPONSE);
     d_requests++;
+    d_phase = "requête";
     if (!s_cp || !s_cp->writeValue(req, n, true)) {
         d_wfail++;
         d_last = "requête Control Point refusée";
         return;
     }
+    d_phase = "attente réponse";
     EventBits_t bits = xEventGroupWaitBits(s_events, EV_RESPONSE | EV_DISCONNECTED, pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
+    d_phase = "prêt";
     if (!(bits & EV_RESPONSE)) {
         d_timeouts++;
         d_last = s_rx.len ? "réponse incomplète" : "pas de réponse Data Source";
@@ -239,11 +251,26 @@ static void fetch(uint64_t item)
 static void ancs_task(void *)
 {
     for (;;) {
-        EventBits_t bits = xEventGroupWaitBits(s_events, EV_SECURED, pdTRUE, pdFALSE, portMAX_DELAY);
-        if (!(bits & EV_SECURED)) continue;
+        d_phase = "attente chiffrement";
+        EventBits_t bits = xEventGroupWaitBits(s_events, EV_SECURED, pdTRUE, pdFALSE, pdMS_TO_TICKS(15000));
+        if (!(bits & EV_SECURED)) {
+            /* Connecté depuis 15 s sans chiffrement : la reprise de liaison a échoué en silence
+             * (iPhone revenu à portée). On coupe : l'iPhone se reconnecte proprement. */
+            uint16_t conn = s_conn;
+            if (s_state == KG_BLE_CONNECTED && conn != BLE_HS_CONN_HANDLE_NONE && s_server) {
+                d_last = "chiffrement jamais établi, reconnexion";
+                s_server->disconnect(conn);
+            }
+            continue;
+        }
         xEventGroupClearBits(s_events, EV_DISCONNECTED);
         xQueueReset(s_uids);
-        if (!ancs_attach()) continue;
+        if (!ancs_attach()) {
+            uint16_t conn = s_conn; /* échec de découverte : on relance la connexion */
+            if (conn != BLE_HS_CONN_HANDLE_NONE && s_server) s_server->disconnect(conn);
+            continue;
+        }
+        d_phase = "prêt";
         s_state = KG_BLE_READY;
         Serial.println("event ble ANCS prêt");
         while (!(xEventGroupGetBits(s_events) & EV_DISCONNECTED)) {
@@ -358,6 +385,8 @@ uint32_t hal_notif_seq(void) { return s_seq; }
 
 void ble_diag(Print &out)
 {
+    out.printf("liaison : %lu connexions, %lu chiffrements, dernière déconnexion 0x%x, tâche : %s\n",
+               (unsigned long)d_connects, (unsigned long)d_secured, d_reason, d_phase);
     out.printf("gap : %lu notifications reçues (dernière poignée %u ; NS %u, DS %u)\n", (unsigned long)d_rx_raw,
                d_rx_handle, d_ns_handle, d_ds_handle);
     out.printf("ancs : %lu événements, %lu requêtes, %lu réponses (%lu trames), %lu sans réponse, %lu écritures refusées%s%s\n",
