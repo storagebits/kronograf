@@ -6,3 +6,4 @@ include/secrets.h
 .DS_Store
 .vscode/
 __pycache__/
+.venv/
