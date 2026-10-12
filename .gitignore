@@ -1,7 +1,7 @@
 .pio/
 build/
 sim/build/
-backups/*.bin
+backups/
 include/secrets.h
 .DS_Store
 .vscode/
