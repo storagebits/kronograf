@@ -6,6 +6,10 @@
  *   bl <n>      rétroéclairage 8..255
  *   timeout <s> délai d'extinction
  *   battlog     journal d'autonomie de la dernière période sur batterie
+ *   face <n>    affiche le cadran n (0 aviateur, 1 circuits, 2 nuit)
+ *   egg         déclenche la décharge du cadran Circuits temporels
+ *   coredump [erase]  résumé du dernier plantage (et effacement)
+ *   reboot      redémarre la montre
  *   diag        affiche l'écran de diagnostic de la Tranche 0
  *   touch [s]   affiche les points touchés pendant s secondes (10 par défaut)
  *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
@@ -16,8 +20,12 @@
 #include "hal_device.h"
 #include "lvgl.h"
 #include "../../ui/ui.h"
+#include "../../ui/faces.h"
 #include <Arduino.h>
 #include <esp_heap_caps.h>
+#include <esp_core_dump.h>
+#include <esp_partition.h>
+#include <esp_system.h>
 #include <esp_log.h>
 #include <WiFi.h>
 #include <mbedtls/base64.h>
@@ -39,7 +47,7 @@ static void cmd_status(void)
     size_t int_total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     lv_mem_monitor_t lv;
     lv_mem_monitor(&lv);
-    s_out->printf("rev=V%d uptime=%lus\n", inv->rev, (unsigned long)(millis() / 1000));
+    s_out->printf("rev=V%d uptime=%lus reset=%d\n", inv->rev, (unsigned long)(millis() / 1000), (int)esp_reset_reason());
     s_out->printf("heap_internal free=%u/%u (%u%%) min=%u largest=%u\n", (unsigned)int_free,
                   (unsigned)int_total, (unsigned)(int_free * 100 / int_total),
                   (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -52,10 +60,15 @@ static void cmd_status(void)
     display_frame_stats(&frame_ms, &frame_px);
     s_out->printf("fps=%.1f frame=%.1fms px/frame=%lu cpu=%luMHz\n", display_fps(), frame_ms,
                   (unsigned long)frame_px, (unsigned long)getCpuFrequencyMhz());
+    float full_avg;
+    uint32_t full_max, full_n;
+    display_full_stats(&full_avg, &full_max, &full_n);
+    s_out->printf("full_frames n=%lu avg=%.1fms max=%lums\n", (unsigned long)full_n, full_avg, (unsigned long)full_max);
     s_out->printf("current batt_discharge=%.1fmA vbus=%.1fmA\n", pmu_discharge_ma(), pmu_vbus_ma());
     s_out->printf("battery=%d%% %dmV charging=%d usb=%d\n", b.percent, b.millivolts, b.charging, b.usb);
     uint32_t wakes, sleeps;
     power_counters(&wakes, &sleeps);
+    s_out->printf("face=%s brightness=%u\n", ui_faces_name(ui_faces_current()), power_brightness());
     s_out->printf("screen=%s wake=%s wakes=%lu light_sleeps=%lu steps=%lu\n", power_screen_on() ? "on" : "off",
                   power_wake_reason(), (unsigned long)wakes, (unsigned long)sleeps,
                   (unsigned long)hal_steps_today());
@@ -95,11 +108,78 @@ static void cmd_screenshot(void)
     heap_caps_free(buf);
 }
 
+/* Résumé du dernier plantage enregistré en flash (partition coredump). Les adresses se
+ * décodent sur le Mac : xtensa-esp32-elf-addr2line -pfiaC -e firmware.elf <adresses>. */
+static void cmd_coredump(bool erase)
+{
+    if (esp_core_dump_image_check() != ESP_OK) {
+        s_out->println("coredump : aucun");
+        return;
+    }
+    auto *sum = static_cast<esp_core_dump_summary_t *>(malloc(sizeof(esp_core_dump_summary_t)));
+    if (sum && esp_core_dump_get_summary(sum) == ESP_OK) {
+        s_out->printf("coredump : tâche=%s pc=0x%08lx cause=%lu vaddr=0x%08lx elf=%.16s\n", sum->exc_task,
+                      (unsigned long)sum->exc_pc, (unsigned long)sum->ex_info.exc_cause,
+                      (unsigned long)sum->ex_info.exc_vaddr, (const char *)sum->app_elf_sha256);
+        s_out->print("backtrace :");
+        for (uint32_t i = 0; i < sum->exc_bt_info.depth; i++) s_out->printf(" 0x%08lx", (unsigned long)sum->exc_bt_info.bt[i]);
+        s_out->println(sum->exc_bt_info.corrupted ? " (corrompue)" : "");
+    }
+    free(sum);
+    if (erase) {
+        esp_core_dump_image_erase();
+        s_out->println("coredump effacé");
+    }
+}
+
+/* Image coredump brute (ELF) en base64, pour espcoredump.py sur le Mac. */
+static void cmd_coredump_raw(void)
+{
+    size_t addr = 0, size = 0;
+    if (esp_core_dump_image_get(&addr, &size) != ESP_OK) {
+        s_out->println("COREDUMP ERR aucun");
+        return;
+    }
+    const esp_partition_t *part =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, nullptr);
+    if (!part) {
+        s_out->println("COREDUMP ERR partition");
+        return;
+    }
+    s_out->printf("COREDUMP %u\n", (unsigned)size);
+    uint8_t chunk[384];
+    unsigned char line[520];
+    for (size_t off = 0; off < size; off += sizeof chunk) {
+        size_t n = size - off < sizeof chunk ? size - off : sizeof chunk;
+        esp_partition_read(part, addr - part->address + off, chunk, n);
+        size_t olen = 0;
+        mbedtls_base64_encode(line, sizeof line, &olen, chunk, n);
+        s_out->printf("C%u:", (unsigned)off);
+        s_out->write(line, olen);
+        s_out->write('\n');
+    }
+    s_out->println("COREDUMP END");
+}
+
 static void run(char *cmd)
 {
+    if (*cmd) lv_disp_trig_activity(nullptr); /* une commande = de l'activité : pas d'extinction en plein test */
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
     else if (!strcmp(cmd, "battlog")) battlog_print(*s_out);
+    else if (!strcmp(cmd, "reboot")) {
+        s_out->println("redémarrage");
+        delay(100);
+        ESP.restart();
+    }
+    else if (!strcmp(cmd, "coredump")) cmd_coredump(false);
+    else if (!strcmp(cmd, "coredump erase")) cmd_coredump(true);
+    else if (!strcmp(cmd, "coredump raw")) cmd_coredump_raw();
+    else if (!strncmp(cmd, "face ", 5)) {
+        power_force(true);
+        ui_faces_show(atoi(cmd + 5), true);
+        s_out->printf("cadran %s\n", ui_faces_name(ui_faces_current()));
+    } else if (!strcmp(cmd, "egg")) face_circuits_discharge();
     else if (!strcmp(cmd, "sleep")) power_force(false);
     else if (!strcmp(cmd, "wake")) power_force(true);
     else if (!strncmp(cmd, "bl ", 3)) power_set_brightness((uint8_t)atoi(cmd + 3));
@@ -124,7 +204,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | face <n> | egg | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
 }
 
@@ -166,12 +246,12 @@ void console_poll(void)
 {
     feed(Serial, Serial, s_serial_line);
     if (!s_server_on) return;
-    if (!s_client || !s_client.connected()) {
-        WiFiClient c = s_server.available();
-        if (c) {
-            s_client = c;
-            s_tcp_line.len = 0;
-        }
+    /* Un nouveau client remplace l'ancien : une déconnexion mal détectée ne bloque jamais la console. */
+    WiFiClient c = s_server.available();
+    if (c) {
+        if (s_client) s_client.stop();
+        s_client = c;
+        s_tcp_line.len = 0;
     }
     if (s_client && s_client.connected()) feed(s_client, s_client, s_tcp_line);
 }

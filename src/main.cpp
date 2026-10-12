@@ -5,12 +5,18 @@
 #include "hal/hal.h"
 #include "lvgl.h"
 #include "ui/ui.h"
+#include "ui/faces.h"
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 
 void setup()
 {
     Serial.begin(115200);
     Serial.println("\nKronograf — démarrage");
+    /* Boucle principale surveillée : un blocage > 8 s provoque une panique, donc un
+     * coredump en flash avec la pile de chaque tâche (au lieu d'un reset muet). */
+    esp_task_wdt_init(8, true);
+    enableLoopWDT();
 
     hal_device_init();
     lv_init();
@@ -19,7 +25,7 @@ void setup()
     power_init();
 
     uint32_t t0 = millis();
-    lv_scr_load(ui_face_aviator_create());
+    ui_faces_start();
     uint32_t t1 = millis();
     lv_refr_now(nullptr);
     Serial.printf("cadran : rendu du fond %lu ms, première image %lu ms\n",

@@ -46,3 +46,19 @@ Chaque entrée : décision — justification. Les plus récentes en bas.
 **D17. Mode atelier (avancé de la Tranche 4).** Les décrochages USB (B2) empêchaient de valider les tranches. Sur USB **et** avec Wi-Fi configuré : Wi-Fi maintenu, OTA (`pio run -e twatch-v1-ota -t upload`, `kronograf.local`) et console TCP 2323 (`tools/kg.py --host kronograf.local …`). Débranchée : Wi-Fi coupé. Justification vis-à-vis de l'anti-pattern « Wi-Fi permanent » : sur secteur, l'autonomie n'est pas en jeu ; désactivable par `-D KG_WORKSHOP=0`. Mot de passe OTA facultatif (`KG_OTA_PASS`).
 
 **D18. Pièges notés :** `sntp_get_sync_status()` remet l'état à zéro à la lecture ; ouvrir le port série sur macOS redémarre l'ESP32 (auto-reset CP210x) ; les logs d'autres tâches s'intercalent dans la sortie série (captures indexées par rangée + nouvel essai).
+
+## Tranche 2 — 2026-10-12
+
+**D19. Cadran 3 = « Nuit »** (heure seule, Barlow Condensed 104 px, rouge sombre `#9A140C`, rétroéclairage à 25 % via `hal_brightness_scale`, une mise à jour par minute) plutôt qu'une fusion des deux univers : les deux premiers cadrans sont déjà riches ; il manquait un cadran sobre, lisible la nuit sans éblouir, et le moins coûteux en énergie (aucune animation, rétroéclairage réduit).
+
+**D20. Afficheurs 7 segments dessinés en code** (`src/ui/seg7.c`, polygones anti-crénelés, inclinaison 0,09) plutôt qu'une police 7 segments : contrôle total des segments éteints (mélange 18/255), du halo (deux polygones élargis semi-transparents), du filament central et du scintillement à l'allumage (courbe 40→200→70→230→150→255 sur 180 ms, seulement sur les segments nouvellement allumés). Étiquettes au pochoir : Allerta Stencil (OFL).
+
+**D21. Données des lignes :** rouge = prochaine alarme (tirets + « AUCUNE ALARME » tant que la Tranche 3 n'existe pas) ; vert = présent ; ambre = dernière synchro NTP (plus parlante que « dernier réveil », qui serait toujours « à l'instant »). Easter egg : appui long sur la ligne verte, ou 10 000 pas franchis (une fois par jour) → trois flashs d'éclairs ramifiés sur 0,7 s + vibreur ; le son de décharge viendra avec le pilote I²S (Tranche 6).
+
+**D22. Transitions par instantanés.** `lv_scr_load_anim` recomposait les deux cadrans à chaque image : 43 ms/image (≈ 23 fps, sous le plancher de 30). Désormais : deux `lv_snapshot` en PSRAM (2 × 115 Ko) puis glissement de deux images → **25 ms/image en moyenne (≈ 40 fps)**, limité par le SPI ; une image isolée à ~94 ms au premier rendu du vrai cadran. Bonus : on n'appelle plus `lv_scr_load_anim`, qui **plante en LVGL 8.3.11** si on l'appelle pendant une transition (`scr_load_internal` remet `scr_to_load` à NULL avant `lv_obj_set_pos`) ; les demandes reçues pendant une transition sont mises en file.
+
+**D23. Réglages persistants** (NVS, espace `kg`) : `face` (écrit 5 s après le dernier changement — jamais pendant une transition, pas d'usure à chaque glissé), `brightness`. Vérifié par redémarrage.
+
+**D24. Blocage au réveil (chien de garde) — corrigé.** Symptôme : après quelques cycles veille/réveil en mode atelier, plus de réponse puis `reset=6` (TWDT). Coredump : cœur 0 accaparé par la tâche `wifi`. Cause : `setCpuFrequencyMhz(80)` appelé à chaque tour de boucle écran éteint, et 240 MHz au réveil, **avec le Wi-Fi actif** — ce qui casse la pile Wi-Fi d'Arduino-ESP32. Correctif : fréquence changée seulement sur transition réelle et jamais Wi-Fi allumé ; pas de sommeil léger Wi-Fi allumé. Validé : 30 cycles veille/réveil/cadran sans reset ni coredump (avant : échec en < 3 cycles).
+
+**D25. Outillage de diagnostic :** boucle principale sous chien de garde 8 s en mode panique (coredump au lieu d'un reset muet), nourri pendant l'OTA ; commandes `coredump`, `coredump raw` (décodage par `esp-coredump` avec toutes les piles), `reboot` ; chaque build archive son ELF dans `build-archive/<sha256[:16]>.elf` (l'empreinte inscrite dans les coredumps) — un dump est toujours décodable.

@@ -27,9 +27,15 @@ def find_port():
 
 
 def open_tcp(host):
-    s = serial.serial_for_url(f"socket://{host}:2323", timeout=2)
-    s.reset_input_buffer()
-    return s
+    for attempt in range(3):
+        try:
+            s = serial.serial_for_url(f"socket://{host}:2323", timeout=2)
+            s.reset_input_buffer()
+            return s
+        except serial.SerialException:
+            if attempt == 2:
+                raise
+            time.sleep(1)
 
 
 def open_port(path):
@@ -119,6 +125,32 @@ def screenshot(s, path):
     return True
 
 
+def coredump_raw(s, path):
+    """Récupère l'image coredump (ELF) ; décoder avec :
+    esp-coredump info_corefile -t raw -c <fichier> .pio/build/<env>/firmware.elf"""
+    s.write(b"coredump raw\n")
+    s.timeout = 5
+    chunks, size = {}, None
+    while True:
+        line = s.readline().decode(errors="replace").strip()
+        if not line:
+            sys.exit("coredump interrompu")
+        if line.startswith("COREDUMP ERR"):
+            sys.exit(line)
+        if line.startswith("COREDUMP ") and line != "COREDUMP END":
+            size = int(line.split()[1])
+        elif line == "COREDUMP END":
+            break
+        elif line.startswith("C") and ":" in line:
+            off, _, b64 = line[1:].partition(":")
+            chunks[int(off)] = base64.b64decode(b64)
+    data = b"".join(chunks[k] for k in sorted(chunks))
+    if size is None or len(data) != size:
+        sys.exit(f"coredump incomplet ({len(data)}/{size})")
+    open(path, "wb").write(data)
+    print(f"coredump {path} ({size} octets)")
+
+
 def command(s, cmd, wait=1.0):
     s.write(cmd.encode() + b"\n")
     end = time.time() + wait
@@ -137,7 +169,9 @@ def main():
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     s = open_tcp(a.host) if a.host else open_port(a.port or find_port())
-    if a.cmd == "screenshot":
+    if a.cmd == "coredump-raw":
+        coredump_raw(s, a.args[0] if a.args else "coredump.bin")
+    elif a.cmd == "screenshot":
         # Un log d'une autre tâche peut s'intercaler au milieu d'une rangée : on recommence.
         if not any(screenshot(s, a.args[0] if a.args else "screenshot.png") for _ in range(3)):
             sys.exit("Capture impossible après 3 essais")

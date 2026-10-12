@@ -7,3 +7,4 @@ include/secrets.h
 .vscode/
 __pycache__/
 .venv/
+build-archive/

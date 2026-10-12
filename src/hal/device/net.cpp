@@ -10,6 +10,11 @@
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <esp_task_wdt.h>
+
+#ifndef KG_WORKSHOP
+#define KG_WORKSHOP 1
+#endif
 
 static volatile time_t s_last_sync;
 static const char *volatile s_status = "inactif";
@@ -49,8 +54,12 @@ static void sync_task(void *)
         }
         sntp_stop();
     }
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
+    /* Sur USB, le mode atelier reprend la connexion telle quelle : pas de coupure qui
+     * ferait sauter une console TCP fraîchement ouverte. */
+    if (!(KG_WORKSHOP && hal_battery().usb && WiFi.status() == WL_CONNECTED)) {
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    }
     s_task = nullptr;
     vTaskDelete(nullptr);
 }
@@ -80,9 +89,6 @@ const char *hal_time_hint(void)
  * Montre sur USB (donc sur secteur) et Wi-Fi configuré : Wi-Fi maintenu, OTA et
  * console TCP actifs. Débranchée : tout est coupé, l'autonomie n'est pas touchée.
  * Désactivable à la compilation (-D KG_WORKSHOP=0). */
-#ifndef KG_WORKSHOP
-#define KG_WORKSHOP 1
-#endif
 #ifndef KG_OTA_PASS
 #define KG_OTA_PASS ""
 #endif
@@ -93,6 +99,10 @@ static void workshop_start(void)
 {
     s_workshop = true;
     s_ota_ready = false;
+    if (WiFi.status() == WL_CONNECTED) { /* connexion héritée de la synchro NTP */
+        s_status = "atelier : connexion";
+        return;
+    }
     WiFi.persistent(false);
     WiFi.setHostname("kronograf");
     WiFi.mode(WIFI_STA);
@@ -124,6 +134,8 @@ void net_workshop_loop(void)
         if (sizeof(KG_OTA_PASS) > 1) ArduinoOTA.setPassword(KG_OTA_PASS);
         ArduinoOTA.onStart([] { Serial.println("event ota start"); });
         ArduinoOTA.onEnd([] { Serial.println("event ota end"); });
+        /* Le transfert OTA tourne dans loop() : nourrir le chien de garde de la boucle. */
+        ArduinoOTA.onProgress([](unsigned int, unsigned int) { esp_task_wdt_reset(); });
         ArduinoOTA.onError([](ota_error_t e) { Serial.printf("event ota error %d\n", e); });
         ArduinoOTA.begin();
         console_tcp_enable(true);

@@ -2,11 +2,13 @@
 
 Firmware de montre pour **LilyGO T-Watch 2020 V1** : cadran de chronographe d'aviation et afficheurs 7 segments « circuits temporels ». PlatformIO + Arduino-ESP32 + LVGL 8.3, avec un simulateur macOS qui compile exactement la même interface.
 
-> État : **Tranches 0 et 1** (fondations ; cadran Chronographe aviateur, NTP, veille et réveils, mode atelier OTA). Voir `DECISIONS.md` pour le journal des choix et `BLOCKERS.md` pour les problèmes rencontrés.
+> État : **Tranches 0 à 2** (fondations ; cadran Chronographe aviateur, NTP, veille et réveils, mode atelier OTA ; cadrans Circuits temporels et Nuit, glissé entre cadrans). Voir `DECISIONS.md` pour le journal des choix et `BLOCKERS.md` pour les problèmes rencontrés.
 
-| Simulateur | Montre (capture série) |
-|---|---|
-| ![sim](docs/screens/sim/t0-diag.png) | ![montre](docs/screens/device/t0-diag.png) |
+| Chronographe aviateur | Circuits temporels | Nuit |
+|---|---|---|
+| ![aviateur](docs/screens/device/t2-face0.png) | ![circuits](docs/screens/device/t2-face1.png) | ![nuit](docs/screens/device/t2-face2.png) |
+
+Captures prises sur la montre (console série/TCP) ; leurs équivalents simulateur sont dans `docs/screens/sim/`.
 
 ## Prérequis
 
@@ -53,6 +55,7 @@ tools/kg.py screenshot docs/screens/device/x.png     # capture LVGL → PNG
 tools/kg.py lcdtest                                  # mire rouge | vert | bleu 5 s
 tools/kg.py battlog                                  # journal d'autonomie (dernière période sur batterie)
 tools/kg.py sleep | wake | bl <8-255> | timeout <s> | touch [s] | diag
+tools/kg.py face <0-2> | egg | coredump [erase] | coredump-raw f.bin | reboot
 tools/kg.py log 3
 ```
 

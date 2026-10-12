@@ -12,6 +12,7 @@ void display_init(void);
 float display_fps(void);
 /* Temps moyen de rendu + envoi d'une image (ms) et pixels redessinés par image. */
 void display_frame_stats(float *ms, uint32_t *px);
+void display_full_stats(float *avg_ms, uint32_t *max_ms, uint32_t *n);
 void display_test_pattern(void);
 
 void touch_init(void);

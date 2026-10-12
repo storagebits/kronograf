@@ -29,6 +29,7 @@ static lv_disp_draw_buf_t s_draw_buf;
 
 static uint32_t s_frames, s_fps_t0;
 static uint32_t s_mon_time, s_mon_px, s_mon_n;
+static uint32_t s_full_time, s_full_n, s_full_max; /* images plein écran (transitions) */
 
 /* Appelé par LVGL après chaque rafraîchissement : durée (rendu + envoi) et surface. */
 static void monitor_cb(lv_disp_drv_t *, uint32_t time, uint32_t px)
@@ -36,6 +37,11 @@ static void monitor_cb(lv_disp_drv_t *, uint32_t time, uint32_t px)
     s_mon_time += time;
     s_mon_px += px;
     s_mon_n++;
+    if (px >= W * H) {
+        s_full_time += time;
+        s_full_n++;
+        if (time > s_full_max) s_full_max = time;
+    }
 }
 
 void display_frame_stats(float *ms, uint32_t *px)
@@ -43,6 +49,14 @@ void display_frame_stats(float *ms, uint32_t *px)
     *ms = s_mon_n ? (float)s_mon_time / s_mon_n : 0;
     *px = s_mon_n ? s_mon_px / s_mon_n : 0;
     s_mon_time = s_mon_px = s_mon_n = 0;
+}
+
+void display_full_stats(float *avg_ms, uint32_t *max_ms, uint32_t *n)
+{
+    *avg_ms = s_full_n ? (float)s_full_time / s_full_n : 0;
+    *max_ms = s_full_max;
+    *n = s_full_n;
+    s_full_time = s_full_n = s_full_max = 0;
 }
 static float s_fps;
 

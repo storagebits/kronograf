@@ -14,6 +14,7 @@
 #include "lvgl.h"
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h>
 #include <Wire.h>
 #include <esp_sleep.h>
 #define XPOWERS_CHIP_AXP202
@@ -98,6 +99,16 @@ void battlog_print(Print &out)
                    (unsigned long)s_log[i].screen_s);
 }
 
+/* Changer la fréquence CPU à chaud avec le Wi-Fi actif casse la pile Wi-Fi sous
+ * Arduino-ESP32 (blocage de la tâche wifi, chien de garde) : on ne change qu'en cas de
+ * besoin réel, et jamais Wi-Fi allumé. */
+static void set_cpu_mhz(uint32_t mhz)
+{
+    if (getCpuFrequencyMhz() == mhz) return;
+    if (WiFi.getMode() != WIFI_OFF) return;
+    setCpuFrequencyMhz(mhz);
+}
+
 static void IRAM_ATTR on_bma_irq() { s_bma_irq = true; }
 static void IRAM_ATTR on_axp_irq() { s_axp_irq = true; }
 
@@ -180,7 +191,7 @@ static void screen_on(const char *reason)
     s_screen_on_since = millis();
     s_wakes++;
     Serial.printf("event wake %s\n", reason);
-    setCpuFrequencyMhz(240);
+    set_cpu_mhz(240);
     display_sleep(false);
     steps_midnight_check();
     lv_obj_invalidate(lv_scr_act());
@@ -252,8 +263,8 @@ void power_loop(void)
     }
 
     if (!s_screen_on) {
-        if (hal_battery().usb) {
-            setCpuFrequencyMhz(80);
+        if (hal_battery().usb || WiFi.getMode() != WIFI_OFF) { /* pas de sommeil léger Wi-Fi allumé */
+            set_cpu_mhz(80);
         } else {
             const char *r = light_sleep();
             if (r) {
