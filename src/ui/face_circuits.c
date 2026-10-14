@@ -3,7 +3,7 @@
  *
  * Three rows of 7-segment displays, each with stencilled labels:
  *   red    DESTINATION TIME    next alarm (dashes when there is none)
- *   green  PRESENT TIME        current date and time, ':' beating the seconds
+ *   green  PRESENT TIME        current date and time, ':' beating the seconds; battery in the band
  *   amber  LAST TIME DEPARTED  last NTP synchronisation
  *
  * Easter egg: long press on the green row, or 10,000 steps reached → electrical
@@ -30,7 +30,7 @@ typedef struct {
 
 static lv_obj_t *s_scr, *s_bolts;
 static row_t s_dest, s_now, s_last;
-static lv_obj_t *s_dest_title;
+static lv_obj_t *s_dest_title, *s_now_title;
 static lv_timer_t *s_timer;
 static int s_last_min = -1, s_last_sec = -1;
 static bool s_egg_done_today;
@@ -232,6 +232,14 @@ static void update(lv_timer_t *t)
 
     show(&s_now, &now);
 
+    /* Battery in the PRESENT TIME band, like the alarm state in the red one; amber below 20 %. */
+    kg_battery_t b = hal_battery();
+    if (b.percent >= 0)
+        lv_label_set_text_fmt(s_now_title, "PRESENT TIME  -  %s %d%%", b.charging ? "CHARGING" : "BATTERY", b.percent);
+    else
+        lv_label_set_text(s_now_title, "PRESENT TIME");
+    lv_obj_set_style_text_color(s_now_title, b.percent >= 0 && b.percent < 20 && !b.charging ? KG_C_SEG_AMBER : KG_C_SEG_GREEN, 0);
+
     struct tm alarm;
     if (model_next_alarm(&alarm)) {
         show(&s_dest, &alarm);
@@ -278,7 +286,7 @@ static lv_obj_t *create(void)
     lv_obj_clear_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
 
     s_dest_title = row(s_scr, 3, KG_C_SEG_RED, "DESTINATION TIME", &s_dest);
-    row(s_scr, 3 + ROW_H, KG_C_SEG_GREEN, "PRESENT TIME", &s_now);
+    s_now_title = row(s_scr, 3 + ROW_H, KG_C_SEG_GREEN, "PRESENT TIME", &s_now);
     row(s_scr, 3 + 2 * ROW_H, KG_C_SEG_AMBER, "LAST TIME DEPARTED", &s_last);
 
     /* Hidden long-press area: the green row. */

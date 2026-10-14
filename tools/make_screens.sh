@@ -11,6 +11,8 @@ shot() { # name VAR=value…
   local name=$1; shift
   env "$@" "$SIM" --shot "$OUT/$name.png" >/dev/null
 }
+shot t2-face1 KG_FACE=1
+shot t2-face2 KG_FACE=2
 shot t4-launcher KG_APP=launcher
 cp "$OUT/t4-launcher.png" "$OUT/t3-launcher.png"
 shot t6-launcher-tools KG_APP=launcher KG_PAGE=1
