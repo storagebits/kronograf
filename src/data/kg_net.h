@@ -74,6 +74,14 @@ int kg_resolve(const char *host, uint32_t *ips, int max, uint32_t *ms);
 
 /* ------------------------------------------------------------------ HTTP */
 
+/* "http://host[:port]/path" → parts; false for anything else (https:// included). */
+typedef struct {
+    char host[64];
+    uint16_t port;
+    char path[192];
+} kg_url_t;
+bool kg_url_parse(const char *url, kg_url_t *u);
+
 /* Body sink: return false to stop the transfer. */
 typedef bool (*kg_http_sink_t)(const uint8_t *data, size_t len, void *ctx);
 /* Plain HTTP/1.0 GET (no TLS: speed test and public-IP services only). Returns the HTTP
@@ -81,6 +89,23 @@ typedef bool (*kg_http_sink_t)(const uint8_t *data, size_t len, void *ctx);
  * the time to the first byte of the response. `cancel` may be NULL. */
 int kg_http_get(const char *host, const char *path, kg_http_sink_t sink, void *ctx, uint32_t timeout_ms,
                 uint32_t *ttfb_us, volatile bool *cancel);
+
+/* General HTTP/1.0 GET for streams: port, up to 3 redirects, "ICY 200" status lines,
+ * extra request headers ("Icy-MetaData: 1\r\n"), response headers through a callback,
+ * an idle timeout (no data for idle_ms ends it) and an optional total timeout (0: none).
+ * Returns the final HTTP status or a negative error as kg_http_get(); -5 too many
+ * redirects or a redirect to https, -6 unsupported URL. */
+typedef struct {
+    const char *url;
+    const char *headers;
+    void (*on_header)(const char *name, const char *value, void *ctx);
+    kg_http_sink_t sink;
+    void *ctx;
+    uint32_t timeout_ms, idle_ms;
+    uint32_t *ttfb_us;
+    volatile bool *cancel;
+} kg_http_req_t;
+int kg_http_request(const kg_http_req_t *r);
 
 /* Copies the string value of "key" from a flat JSON object; false if absent. */
 bool kg_json_str(const char *json, const char *key, char *out, size_t n);

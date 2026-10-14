@@ -15,7 +15,8 @@ target_compile_options(lvgl PRIVATE -w)
 
 file(GLOB_RECURSE UI_SRC ${ROOT}/src/ui/*.c)
 file(GLOB DATA_SRC ${ROOT}/src/data/*.c)
-add_executable(kronograf_sim main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${UI_SRC} ${DATA_SRC})
+add_executable(kronograf_sim main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${ROOT}/src/hal/sim/hal_sim_media.c
+  ${ROOT}/src/third_party/tjpgd/tjpgd.c ${UI_SRC} ${DATA_SRC})
 target_compile_definitions(kronograf_sim PRIVATE KG_ROOT="${ROOT}")
 target_include_directories(kronograf_sim PRIVATE ${ROOT}/src ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(kronograf_sim PRIVATE ${ROOT}/include)
@@ -25,4 +26,4 @@ if(UNIX AND NOT APPLE)
 endif()
 # Our code builds warning-free (generated fonts are excluded from -Werror).
 file(GLOB UI_OWN ${ROOT}/src/ui/*.c)
-set_source_files_properties(main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${UI_OWN} ${DATA_SRC} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
+set_source_files_properties(main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${ROOT}/src/hal/sim/hal_sim_media.c ${UI_OWN} ${DATA_SRC} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")

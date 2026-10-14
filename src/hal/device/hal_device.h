@@ -93,6 +93,17 @@ bool net_hold_active(void);
 void nettools_cancel(void);              /* lease lapsed: stop the running tool */
 void ble_tool_scan(kg_tool_state_t *st, const kg_tools_env_t *env); /* ble.cpp */
 
+/* Speaker stream for the radio (feedback.cpp): 16-bit mono. */
+bool audio_stream_open(uint32_t rate);
+void audio_stream_write(const int16_t *samples, size_t n);
+void audio_stream_close(void);
+
+/* Radio and video state for the console (media.cpp). */
+void media_print(Print &out);
+
+/* Wi-Fi kept on by the radio, screen off included (net.cpp). */
+void net_keep(bool on);
+
 /* Infrared transmitter (ir.cpp). */
 void ir_print(Print &out);
 

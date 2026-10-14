@@ -3,7 +3,7 @@
 [![CI](https://github.com/storagebits/kronograf/actions/workflows/ci.yml/badge.svg)](https://github.com/storagebits/kronograf/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, weather and real-time bus departures, iPhone notifications, a network engineer's toolbox on the wrist (Wi-Fi analyzer, ping, traceroute, LAN scan, speed test…), a TV remote, a world clock and a sun & moon almanac. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
+**A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, weather and real-time bus departures, iPhone notifications, a network engineer's toolbox on the wrist (Wi-Fi analyzer, ping, traceroute, LAN scan, speed test…), web radio, an MJPEG camera viewer, a TV remote, a world clock and a sun & moon almanac. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
 
 <p align="center">
   <img src="docs/screens/kronograf-demo.gif" width="360" alt="Demo: aviator face, time circuits with the lightning easter egg, night face, launcher, weather, an iPhone notification, then the network toolbox and its Wi-Fi analyzer">
@@ -16,7 +16,8 @@
 | | |
 |---|---|
 | **Faces** | *Aviator chronograph* (smooth hands, battery / minutes / steps sub-dials, date window, weather complication, notification badge) · *Time circuits* (three 7-segment rows: next alarm, present time, last sync) · *Night* (time only, dark red, dimmed backlight). Swipe sideways between faces. |
-| **Apps** | Stopwatch, timer, alarms, world clock, weather + buses, sun & moon, 7-day step history, level, torch, network toolbox, TV remote, system monitor, settings — a launcher of 3 × 3 pages drawn like sub-dials, swiped sideways. |
+| **Apps** | Stopwatch, timer, alarms, world clock, weather + buses, sun & moon, 7-day step history, level, torch, network toolbox, radio, video, TV remote, system monitor, settings — a launcher of 3 × 3 pages drawn like sub-dials, swiped sideways. |
+| **Radio & video** | *Radio*: MP3 web radio on the speaker (Radio Paradise, BBC World Service, KEXP, FIP, Radio Swiss Classic, or any http:// MP3 stream), song titles from the stream, volume, keeps playing with the screen off · *Video*: an MJPEG camera (ESP32-CAM, IP camera, 3D printer) or a JPEG snapshot URL, full screen at ~10–15 fps. Decoded on the watch (minimp3, TJpgDec). |
 | **Network toolbox** | *Wi-Fi analyzer* (2.4 GHz channel map, every network with channel, signal and security) · *Link* (SSID, BSSID, signal, address, gateway, DNS, MAC, public IP and provider) · *Ping* with an RTT history and loss · *Traceroute* (ICMP, TTL 1–24) · *DNS lookup* · *Port check* (16 common TCP services) · *LAN scan* (ARP sweep of the /24, private MACs spotted) · *Speed test* (10 s download) · *Bluetooth scan* (BLE devices and their makers) · *Subnet calculator* (offline). Wi-Fi only stays on while the toolbox is open. |
 | **World & sky** | Twelve cities from Honolulu to Auckland with summer time, day / night and day shift, plus Zulu time · sunrise, sunset, civil twilight, day length and its daily change, the Moon's phase drawn to scale and the next full moon — computed offline. |
 | **Hardware tools** | *TV remote* over the infrared LED (Samsung, LG, Sony, Philips; power, volume, channels, mute, input, and "all TVs") · *Level* from the accelerometer, zeroed on any surface · *Torch* in white or red at full backlight · *System*: battery voltage and current from the AXP202, its temperature, RAM and PSRAM, CPU, frame rate, uptime, reset cause. |
@@ -47,6 +48,8 @@ cmake -S sim -B sim/build -DCMAKE_BUILD_TYPE=Release && cmake --build sim/build 
 sim/build/kronograf_sim                                       # ×3 window, the mouse is your finger
 KG_TIME=10:09:30 sim/build/kronograf_sim --shot shot.png      # headless PNG screenshot
 KG_NET_REAL=1 KG_APP=net:trace sim/build/kronograf_sim        # the toolbox, for real, from the Mac
+KG_NET_REAL=1 KG_APP=radio sim/build/kronograf_sim            # web radio through the Mac's speakers
+tools/mjpeg_test_server.py                                    # an MJPEG test stream for the Video app
 tools/make_screens.sh                                         # screenshots + the overview sheet
 tools/make_demo_gif.sh                                        # re-records the demo GIF (ffmpeg)
 ```
@@ -99,6 +102,7 @@ screenshot f  LVGL capture → PNG              lcdtest       R | G | B test pat
 battlog       battery-life log                power <min>   current measured on USB, simulated battery
 weather [refresh]   bus [refresh | stops <codes> | key <key>]   ble [on | off | forget]
 net [<tool> [target]]   network toolbox: ping, trace, dns, ports, lan, speed, public, ble
+radio [play <n> | stop | vol <n> | url <u>]   video [play | stop | url <u>]
 sys           system information             accel         accelerometer in g
 ir [<brand> <key>]  sends a TV code          app net:<tool>  opens a network tool
 sleep | wake | bl <n> | timeout <s> | face <n> | app <name> | timer <s> | coredump | reboot
@@ -109,7 +113,8 @@ sleep | wake | bl <n> | timeout <s> | face <n> | app <name> | timer <s> | coredu
 ```
 src/ui/          LVGL interface, identical on watch and simulator (faces, apps, theme, fonts)
 src/data/        plain C, host-tested: Open-Meteo, GTFS-RT (streamed protobuf), ANCS, network probes and
-                 toolbox runners (BSD sockets), time zones, sun and moon, infrared codes
+                 toolbox runners (BSD sockets), time zones, sun and moon, infrared codes, radio and video
+src/third_party/ minimp3 (CC0) and TJpgDec (ChaN), vendored — see its README
 src/hal/hal.h    the only hardware interface the UI sees
 src/hal/device/  T-Watch: display (esp_lcd, DMA), AXP202, BMA423, network, BLE, safeguards
 src/hal/sim/     simulated implementation
@@ -138,14 +143,26 @@ Development went in stages, each one flashed and verified on the watch.
 - ✅ **5**: iPhone notifications.
 - 🧪 **6**: infrared TV remote — built and simulated, to be checked on the watch.
 - 🧪 **8**: network toolbox, world clock, sun & moon, level, torch, system monitor — built, simulated, network tools run for real from the simulator; on-watch check pending.
+- 🧪 **9**: web radio and MJPEG video — on the `feature/media` branch, in pre-release.
 - 🔜 **7**: polish and a battery-life campaign.
 
 **Known limitations.** This board has no 32 kHz crystal, so light sleep is impossible while BLE is active: battery life with notifications is being measured (D41). The development unit's micro-USB connector is unreliable (B2), hence OTA updates and block flashing.
+
+## Development workflow
+
+`main` only receives tested work. New features go on a branch (`feature/…`) with a pull request: CI builds and tests it, and a **pre-release** can be cut from the branch for testing on a watch — tag it `vX.Y.Z-beta.N` and GitHub Actions publishes it as a pre-release, never as "Latest". Once validated, the pull request is merged into `main` and a plain `vX.Y.Z` tag publishes the release.
+
+```sh
+git switch -c feature/my-idea          # work, commit
+git push -u origin feature/my-idea     # then open a pull request: CI runs on it
+git tag -a v0.7.0-beta.1 -m "…" && git push origin v0.7.0-beta.1   # pre-release for testing
+```
 
 ## Licence and credits
 
 Kronograf's code is released under the [MIT licence](LICENSE). Dependencies and assets:
 
+- [minimp3](https://github.com/lieff/minimp3) (CC0) and [TJpgDec](http://elm-chan.org/fsw/tjpgd/) (ChaN's free licence), in `src/third_party/`.
 - [LVGL](https://lvgl.io) 8.3 (MIT), [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) (Apache 2.0), [XPowersLib](https://github.com/lewisxhe/XPowersLib) and [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT), [stb_image_write](https://github.com/nothings/stb) (public domain / MIT).
 - [Barlow Condensed](https://fonts.google.com/specimen/Barlow+Condensed) and [Allerta Stencil](https://fonts.google.com/specimen/Allerta+Stencil) fonts, under the SIL Open Font License (`assets/fonts/OFL-*.txt`).
 - [My-TTGO-Watch](https://github.com/sharandac/My-TTGO-Watch) and the LilyGO library served as references for the pinout and init sequences, without reusing their code (see `docs/AUDIT.md`).

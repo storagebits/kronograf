@@ -16,8 +16,8 @@ static const kg_app_t *const APPS[] = {
     &kg_app_chrono, &kg_app_timer, &kg_app_alarms,
     &kg_app_world, &kg_app_weather, &kg_app_sky,
     &kg_app_steps, &kg_app_level, &kg_app_torch,
-    &kg_app_net, &kg_app_remote, &kg_app_system,
-    &kg_app_settings,
+    &kg_app_net, &kg_app_radio, &kg_app_video,
+    &kg_app_remote, &kg_app_system, &kg_app_settings,
 };
 #define N_APPS ((int)(sizeof APPS / sizeof APPS[0]))
 
@@ -166,6 +166,27 @@ void ui_nav_draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
         line(ctx, &acc, cx - 8, cy - 2, cx - 10, cy - 4);
         line(ctx, &acc, cx + 8, cy - 2, cx + 10, cy - 4);
         line(ctx, &d, cx - 7, cy + 11, cx + 7, cy + 11);
+        break;
+    case KG_ICON_RADIO: { /* transistor radio */
+        line(ctx, &d, cx - 11, cy - 4, cx + 11, cy - 4);
+        line(ctx, &d, cx - 11, cy + 10, cx + 11, cy + 10);
+        line(ctx, &d, cx - 11, cy - 4, cx - 11, cy + 10);
+        line(ctx, &d, cx + 11, cy - 4, cx + 11, cy + 10);
+        line(ctx, &acc, cx - 6, cy - 4, cx + 7, cy - 12);
+        arc(ctx, 2, KG_C_ACCENT, cx - 4, cy + 3, 3, 0, 360);
+        line(ctx, &d, cx + 4, cy, cx + 7, cy);
+        line(ctx, &d, cx + 4, cy + 4, cx + 7, cy + 4);
+        break;
+    }
+    case KG_ICON_VIDEO: /* camera */
+        line(ctx, &d, cx - 12, cy - 6, cx + 3, cy - 6);
+        line(ctx, &d, cx - 12, cy + 7, cx + 3, cy + 7);
+        line(ctx, &d, cx - 12, cy - 6, cx - 12, cy + 7);
+        line(ctx, &d, cx + 3, cy - 6, cx + 3, cy + 7);
+        line(ctx, &d, cx + 3, cy - 1, cx + 11, cy - 6);
+        line(ctx, &d, cx + 3, cy + 2, cx + 11, cy + 7);
+        line(ctx, &d, cx + 11, cy - 6, cx + 11, cy + 7);
+        arc(ctx, 2, KG_C_ACCENT, cx - 7, cy - 1, 1, 0, 360);
         break;
     case KG_ICON_TORCH: /* flashlight */
         line(ctx, &d, cx - 3, cy, cx - 3, cy + 12);

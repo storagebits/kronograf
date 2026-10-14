@@ -2,6 +2,8 @@ name: Release
 
 # Pushing a tag such as v0.5.0 builds the firmware on GitHub — where include/secrets.h does
 # not exist, so the binaries carry no Wi-Fi credentials or API key — and publishes it.
+# A tag with a suffix (v0.7.0-beta.1, v0.7.0-rc.1) is published as a pre-release: never
+# "Latest", for testing builds from a feature branch before they reach main.
 on:
   push:
     tags: ["v*"]
@@ -40,7 +42,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > notes.md <<EOF
+          PRE=""
+          case "$GITHUB_REF_NAME" in *-*) PRE="--prerelease" ;; esac
+          if [ -n "$PRE" ]; then
+            echo "> [!NOTE]" > notes.md
+            echo "> **Pre-release** for testing, built from a development branch: it may still contain bugs." >> notes.md
+            echo "" >> notes.md
+          else
+            : > notes.md
+          fi
+          cat >> notes.md <<EOF
           Firmware for the **LilyGO T-Watch 2020 V1**, built by GitHub Actions from \`${GITHUB_SHA::7}\`.
           These binaries contain no Wi-Fi credentials and no API key.
 
@@ -53,4 +64,4 @@ jobs:
           **After flashing:** pick a network in Settings → Wi-Fi. For STM bus departures, add your API key in
           Settings → STM buses, or over the console: \`tools/kg.py bus key <your key>\`.
           EOF
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Kronograf $GITHUB_REF_NAME" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Kronograf $GITHUB_REF_NAME" --notes-file notes.md $PRE
