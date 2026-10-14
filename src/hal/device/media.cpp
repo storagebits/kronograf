@@ -82,6 +82,7 @@ void hal_video_set_url(const char *url)
 static kg_radio_t *s_radio;        /* session in PSRAM */
 static volatile int s_radio_tasks; /* running tasks of the session */
 static kg_radio_status_t s_radio_last; /* status once the session is gone */
+static TaskHandle_t s_radio_net_h, s_radio_mp3_h;
 
 static void radio_task_done(void)
 {
@@ -140,8 +141,10 @@ void hal_radio_play(const char *name, const char *url)
     }
     net_keep(true);
     s_radio_tasks = 2;
-    xTaskCreatePinnedToCore(radio_net_task, "kg_radio_net", 6144, nullptr, 2, nullptr, 0);
-    xTaskCreatePinnedToCore(radio_play_task, "kg_radio_mp3", 6144, nullptr, 3, nullptr, 0);
+    /* ~6.2 KB measured at peak (DNS, redirects): 7 KB leaves a safe margin. */
+    xTaskCreatePinnedToCore(radio_net_task, "kg_radio_net", 7168, nullptr, 2, &s_radio_net_h, 0);
+    /* Measured on the watch: the decoder peaks at ~1.5 KB of stack (its buffers are in PSRAM). */
+    xTaskCreatePinnedToCore(radio_play_task, "kg_radio_mp3", 3584, nullptr, 3, &s_radio_mp3_h, 0);
 }
 
 void hal_radio_status(kg_radio_status_t *out)
@@ -230,6 +233,9 @@ void media_print(Print &out)
     kg_radio_status_t r;
     hal_radio_status(&r);
     static const char *const RS[] = {"off", "connecting", "buffering", "playing", "error"};
+    if (s_radio_tasks == 2)
+        out.printf("radio stacks free: net %u, mp3 %u bytes\n", (unsigned)uxTaskGetStackHighWaterMark(s_radio_net_h),
+                   (unsigned)uxTaskGetStackHighWaterMark(s_radio_mp3_h));
     out.printf("radio: %s \"%s\" %u kbps %lu Hz buffer %u %% vol %u underruns %lu title \"%s\" %s\n", RS[r.state],
                r.station, r.kbps, (unsigned long)r.rate, r.buffer_pct, r.volume, (unsigned long)r.underruns, r.title,
                r.error);

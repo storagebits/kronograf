@@ -142,7 +142,7 @@ static void audio_task(void *)
 }
 #endif
 
-/* Audio stream (radio): 16-bit mono at the stream's rate, 8 DMA buffers (~45 ms at 44.1 kHz)
+/* Audio stream (radio): 16-bit mono at the stream's rate, 6 DMA buffers (~35 ms at 44.1 kHz)
  * smoothing the decoder's bursts. Tones are dropped while a stream owns the speaker. */
 bool audio_stream_open(uint32_t rate)
 {
@@ -155,7 +155,7 @@ bool audio_stream_open(uint32_t rate)
         s_streaming = true;
     }
     i2s_stop();
-    i2s_start(rate, 8);
+    i2s_start(rate, 6);
     return s_i2s_ready;
 #else
     (void)rate;

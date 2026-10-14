@@ -182,9 +182,9 @@ static void radio_header(const char *name, const char *value, void *ctx)
 static bool radio_sink(const uint8_t *data, size_t len, void *ctx)
 {
     kg_radio_t *r = ctx;
-    uint8_t tmp[1460];
+    uint8_t *tmp = r->chunk;
     while (len && !r->cancel) {
-        size_t n = len < sizeof tmp ? len : sizeof tmp;
+        size_t n = len < sizeof r->chunk ? len : sizeof r->chunk;
         memcpy(tmp, data, n);
         data += n;
         len -= n;

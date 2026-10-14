@@ -49,7 +49,7 @@ sim/build/kronograf_sim                                       # ×3 window, the 
 KG_TIME=10:09:30 sim/build/kronograf_sim --shot shot.png      # headless PNG screenshot
 KG_NET_REAL=1 KG_APP=net:trace sim/build/kronograf_sim        # the toolbox, for real, from the Mac
 KG_NET_REAL=1 KG_APP=radio sim/build/kronograf_sim            # web radio through the Mac's speakers
-tools/mjpeg_test_server.sh                                    # an MJPEG test stream for the Video app
+tools/mjpeg_test_server.py                                    # an MJPEG test stream for the Video app
 tools/make_screens.sh                                         # screenshots + the overview sheet
 tools/make_demo_gif.sh                                        # re-records the demo GIF (ffmpeg)
 ```

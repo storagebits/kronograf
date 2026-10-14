@@ -3,7 +3,7 @@
  *   KG_RADIO=play        the radio playing a station, with a song title
  *   KG_VIDEO_URL=…       a camera URL; without KG_NET_REAL the frame is sim/demo-camera.jpg
  * With KG_NET_REAL=1 both run for real from the Mac, as on the watch: the same loops
- * (kg_media.c) in threads, the radio through SDL audio (try tools/mjpeg_test_server.sh for
+ * (kg_media.c) in threads, the radio through SDL audio (try tools/mjpeg_test_server.py for
  * the video).
  */
 #include "../hal.h"

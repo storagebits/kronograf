@@ -92,6 +92,7 @@ typedef struct {
     volatile bool net_done;
     kg_ring_t ring;
     kg_icy_t icy;
+    uint8_t chunk[1460];   /* network → ring staging, off the network task's stack */
     const kg_media_env_t *env;
 } kg_radio_t;
 
