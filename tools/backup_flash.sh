@@ -1,7 +1,6 @@
 #!/bin/bash
-# Sauvegarde intégrale (16 Mo) de la flash par blocs de 1 Mo, résistante aux
-# déconnexions USB : attend le port, relit seulement le bloc interrompu.
-# Lecture seule : n'écrit jamais sur la montre.
+# Full backup (16 MB) of the flash in 1 MB blocks, resilient to USB dropouts: waits for
+# the port and only re-reads the interrupted block. Read-only: never writes to the watch.
 set -u
 cd "$(dirname "$0")/.."
 OUT=backups/twatch-original-$(date +%Y%m%d).bin
@@ -23,7 +22,7 @@ for i in $(seq 0 15); do
   if [ -f "$part" ] && [ "$(stat -f %z "$part")" -eq $CHUNK ]; then continue; fi
   for attempt in $(seq 1 20); do
     wait_port
-    echo "bloc $i/15 tentative $attempt sur $PORT"
+    echo "block $i/15 attempt $attempt on $PORT"
     rm -f "$part"
     if esptool.py --port "$PORT" --baud "$BAUD" read_flash $((i * CHUNK)) $CHUNK "$part" >/dev/null 2>&1 \
        && [ "$(stat -f %z "$part")" -eq $CHUNK ]; then
@@ -31,12 +30,12 @@ for i in $(seq 0 15); do
     fi
     sleep 3
   done
-  [ -f "$part" ] && [ "$(stat -f %z "$part")" -eq $CHUNK ] || { echo "ECHEC bloc $i"; exit 1; }
+  [ -f "$part" ] && [ "$(stat -f %z "$part")" -eq $CHUNK ] || { echo "FAILED block $i"; exit 1; }
 done
 
 cat "$PARTS"/*.bin > "$OUT"
 size=$(stat -f %z "$OUT")
-[ "$size" -eq $((16 * CHUNK)) ] || { echo "ECHEC taille $size"; exit 1; }
+[ "$size" -eq $((16 * CHUNK)) ] || { echo "FAILED size $size"; exit 1; }
 rm -r "$PARTS"
-echo "OK $OUT $size octets"
+echo "OK $OUT $size bytes"
 shasum -a 256 "$OUT"

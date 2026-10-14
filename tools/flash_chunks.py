@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Flash de l'application par blocs de 64 Ko, chacun vérifié, repris après chaque décrochage USB.
+"""Flashes the application in 64 KB blocks, each verified, resuming after every USB dropout.
 
-Pour une liaison USB instable (BLOCKERS.md B2) : chaque session esptool n'écrit qu'un bloc
-(~2 s), les blocs vérifiés sont mémorisés et l'on reprend là où l'on s'est arrêté.
-otadata (boot_app0) est écrit en dernier : la montre redémarre sur app0.
+For an unstable USB link (BLOCKERS.md B2): each esptool session writes a single block
+(~2 s), verified blocks are remembered and the run resumes where it stopped.
+otadata (boot_app0) is written last: the watch reboots into app0.
 
   ~/.platformio/penv/bin/python tools/flash_chunks.py [.pio/build/twatch-v1/firmware.bin]
 """
@@ -36,7 +36,7 @@ def main():
     while time.time() < deadline:
         left = [(a, p) for a, p in todo if a not in done]
         if not left:
-            print("flash terminé", flush=True)
+            print("flash complete", flush=True)
             return 0
         ports = glob.glob("/dev/cu.usbserial-*") + glob.glob("/dev/cu.SLAB_USBtoUART")
         if not ports:
@@ -44,7 +44,7 @@ def main():
             continue
         n_try += 1
         if n_try % 2 == 0:
-            ports.reverse()  # deux pilotes possibles pour le CP2104 : on alterne
+            ports.reverse()  # two possible drivers for the CP2104: alternate
         addr, path = left[0]
         r = subprocess.run([PY, ESPTOOL, "--chip", "esp32", "--port", ports[0], "--baud", "460800",
                             "--after", "no_reset", "write_flash", "-z", "--flash_size", "keep", hex(addr), path],
@@ -52,7 +52,7 @@ def main():
         if "Hash of data verified." in r.stdout:
             done.add(addr)
             print(f"{time.strftime('%T')} {hex(addr)} ok — {len(done)}/{len(todo)}", flush=True)
-    print("délai dépassé", flush=True)
+    print("timed out", flush=True)
     return 1
 
 

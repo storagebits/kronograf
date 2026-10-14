@@ -77,7 +77,7 @@ static lv_coord_t digit_x(const seg7_t *s, int i)
     return x;
 }
 
-/* ---------------------------------------------------------------- dessin */
+/* ---------------------------------------------------------------- drawing */
 
 static void draw_poly(lv_draw_ctx_t *ctx, const lv_point_t *pts, lv_color_t c, lv_opa_t opa)
 {
@@ -113,7 +113,7 @@ static void draw_cb(lv_event_t *e)
             /* Newly lit segment: intensity modulated by the flicker. */
             uint8_t level = (s->fresh[i] & (1 << k)) ? s->flicker[i] : 255;
             lv_color_t lit = lv_color_mix(s->color, off, level);
-            segment_poly(seg[k][0], seg[k][1], t, 2.5f, p, ox, oy, s->dh); /* halo large */
+            segment_poly(seg[k][0], seg[k][1], t, 2.5f, p, ox, oy, s->dh); /* wide glow */
             draw_poly(ctx, p, s->color, (lv_opa_t)(level * 14 / 255));
             segment_poly(seg[k][0], seg[k][1], t, 1.2f, p, ox, oy, s->dh); /* tight glow */
             draw_poly(ctx, p, s->color, (lv_opa_t)(level * 40 / 255));
@@ -144,7 +144,7 @@ static void draw_cb(lv_event_t *e)
     }
 }
 
-/* ----------------------------------------------------------- scintillement */
+/* ----------------------------------------------------------------- flicker */
 
 static void flicker_cb(void *var, int32_t v)
 {

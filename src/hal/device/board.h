@@ -1,11 +1,11 @@
 /*
- * Brochage T-Watch 2020 par révision (source : TTGO_TWatch_Library 1.4.1, board/twatch2020_v*.h).
- * Voir docs/AUDIT.md §3.
+ * T-Watch 2020 pinout by revision (source: TTGO_TWatch_Library 1.4.1, board/twatch2020_v*.h).
+ * See docs/AUDIT.md §3.
  */
 #pragma once
 
 #if !defined(KG_BOARD_V1) && !defined(KG_BOARD_V2) && !defined(KG_BOARD_V3)
-#error "Définir KG_BOARD_V1, KG_BOARD_V2 ou KG_BOARD_V3 (platformio.ini)"
+#error "Define KG_BOARD_V1, KG_BOARD_V2 or KG_BOARD_V3 (platformio.ini)"
 #endif
 
 #define PIN_TFT_MOSI 19
@@ -55,7 +55,7 @@
 #define PIN_I2S_DOUT  33
 #endif
 
-/* Adresses I²C */
+/* I²C addresses */
 #define I2C_AXP202  0x35
 #define I2C_PCF8563 0x51
 #define I2C_BMA423  0x19

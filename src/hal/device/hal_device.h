@@ -1,17 +1,17 @@
-/* Fonctions propres à la cible montre (non vues par l'UI). */
+/* Watch-target functions (not visible to the UI). */
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
 class Print;
 
-/* Fuseau America/Toronto avec règles DST nord-américaines. */
+/* America/Toronto time zone with North American DST rules. */
 #define KG_TZ "EST5EDT,M3.2.0,M11.1.0"
 
 void hal_device_init(void);
 
 void display_init(void);
 float display_fps(void);
-/* Temps moyen de rendu + envoi d'une image (ms) et pixels redessinés par image. */
+/* Average render + transfer time per frame (ms) and pixels redrawn per frame. */
 void display_frame_stats(float *ms, uint32_t *px);
 void display_full_stats(float *avg_ms, uint32_t *max_ms, uint32_t *n);
 void display_test_pattern(void);
@@ -19,10 +19,10 @@ void display_test_pattern(void);
 void touch_init(void);
 bool touch_last(int16_t *x, int16_t *y);
 
-/* Horloge PCF8563 */
+/* PCF8563 clock */
 void rtc_from_system(void);
 
-/* AXP202 : interruptions bouton / USB (aucun rail modifié) */
+/* AXP202: button / USB interrupts (no rail is ever changed) */
 #define PMU_IRQ_BUTTON 0x1
 #define PMU_IRQ_VBUS   0x2
 void pmu_enable_button_irq(void);
@@ -33,16 +33,16 @@ float pmu_vbus_ma(void);
 float pmu_discharged_mah(void);
 void pmu_audio_power(bool on);
 
-/* Vibreur et sons */
+/* Vibration motor and sounds */
 void feedback_init(void);
 
-/* Journal d'autonomie (sur batterie) */
+/* Battery-life log (on battery) */
 void battlog_print(Print &out);
 
-/* Écran */
+/* Display */
 void display_sleep(bool sleep);
 
-/* Énergie */
+/* Power */
 void power_init(void);
 void power_loop(void);
 bool power_screen_on(void);
@@ -53,12 +53,12 @@ void power_set_timeout(uint32_t ms);
 void power_force(bool on);
 void power_counters(uint32_t *wakes, uint32_t *light_sleeps);
 
-/* Réseau : synchro NTP en tâche de fond si secrets.h fournit un Wi-Fi */
+/* Network: background NTP sync when Wi-Fi credentials are available */
 void net_start_time_sync(void);
 const char *net_status(void);
 int net_bus_last_error(void);
 
-/* Garde-fous (guard.cpp) : chien de garde RTC et miettes de pain en mémoire RTC. */
+/* Safeguards (guard.cpp): RTC watchdog and breadcrumbs in RTC memory. */
 enum {
     KG_CRUMB_NONE, KG_CRUMB_LOOP, KG_CRUMB_LVGL, KG_CRUMB_CONSOLE, KG_CRUMB_POWER, KG_CRUMB_PRE_SLEEP,
     KG_CRUMB_POST_SLEEP, KG_CRUMB_SCREEN_OFF, KG_CRUMB_SCREEN_ON, KG_CRUMB_WORKSHOP_ON, KG_CRUMB_WORKSHOP_OFF,
@@ -71,7 +71,7 @@ bool guard_safe_mode(void);
 void guard_crumb(uint32_t id);
 const char *guard_report(char *buf, size_t n);
 
-/* USB stable (anti-rebond 3 s) : base des décisions Wi-Fi et sommeil léger. */
+/* Stable USB (3 s debounce): drives the Wi-Fi and light-sleep decisions. */
 bool power_usb_stable(void);
 void power_battery_sim(bool on);
 void power_measure_start(uint32_t minutes);
@@ -80,11 +80,11 @@ void power_measure_print(Print &out);
 void console_poll(void);
 void console_tcp_enable(bool on);
 
-/* Mode atelier : sur USB, Wi-Fi + OTA + console TCP (cf. DECISIONS). */
+/* Workshop mode: on USB, Wi-Fi + OTA + TCP console (see DECISIONS). */
 void net_workshop_loop(void);
 
-/* BLE / notifications iPhone (ble.cpp) */
+/* BLE / iPhone notifications (ble.cpp) */
 void ble_start(void);
-bool ble_active(void);     /* contrôleur allumé : pas de sommeil léger (pas de quartz 32 kHz) */
-bool ble_take_wake(void);  /* une notification ou un appairage demande l'écran */
-void ble_diag(Print &out); /* compteurs ANCS pour la console */
+bool ble_active(void);     /* controller on: no light sleep (no 32 kHz crystal) */
+bool ble_take_wake(void);  /* a notification or pairing wants the screen */
+void ble_diag(Print &out); /* ANCS counters for the console */

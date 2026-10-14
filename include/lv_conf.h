@@ -58,7 +58,7 @@
     /*Set an address for the memory pool instead of allocating it as a normal array. Can be in external SRAM too.*/
     #define LV_MEM_ADR 0     /*0: unused*/
     /*Instead of an address give a memory allocator that will be called to get a memory pool for LVGL. E.g. my_malloc*/
-    /* Kronograf : réserve LVGL en PSRAM sur la montre (libère 64 Ko de DRAM pour le BLE). */
+    /* Kronograf: LVGL pool in PSRAM on the watch (frees 64 KB of DRAM for BLE). */
     #define LV_MEM_POOL_INCLUDE "kg_mem.h"
     #define LV_MEM_POOL_ALLOC kg_lv_pool_alloc
 
@@ -282,7 +282,7 @@
  *-----------*/
 
 /*1: Show CPU usage and FPS count*/
-#define LV_USE_PERF_MONITOR 0  /* FPS mesuré par kg_perf, exposé en série */
+#define LV_USE_PERF_MONITOR 0  /* FPS measured by the display driver, reported on the console */
 #if LV_USE_PERF_MONITOR
     #define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_RIGHT
 #endif

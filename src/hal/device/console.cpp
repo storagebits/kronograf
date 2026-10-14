@@ -1,26 +1,29 @@
 /*
- * Console série de diagnostic (115200 bauds, une commande par ligne).
- *   status      heap interne / PSRAM, FPS, batterie, uptime, révision
- *   screenshot  capture LVGL de l'écran courant, envoyée en base64 (tools/screenshot.py)
- *   sleep|wake  éteint / rallume l'écran
- *   bl <n>      rétroéclairage 8..255
- *   timeout <s> délai d'extinction
- *   battlog     journal d'autonomie de la dernière période sur batterie
- *   face <n>    affiche le cadran n (0 aviateur, 1 circuits, 2 nuit)
- *   launcher    ouvre le lanceur d'apps
- *   app <nom>   ouvre une app (chrono, timer, alarms, steps, settings)
- *   ring <alarm|timer>  écran d'alerte + sonnerie (test)
- *   timer <s>   lance le minuteur (test des échéances)
- *   battsim <0|1>  simule la batterie sur USB (test du sommeil léger)
- *   conso [min]    mesure du courant sur USB, batterie simulée et écran éteint
- *   beep        bip court (test du haut-parleur)
- *   egg         déclenche la décharge du cadran Circuits temporels
- *   coredump [erase]  résumé du dernier plantage (et effacement)
- *   reboot      redémarre la montre
- *   diag        affiche l'écran de diagnostic de la Tranche 0
- *   touch [s]   affiche les points touchés pendant s secondes (10 par défaut)
- *   lcdtest     mire rouge | vert | bleu 5 s, hors LVGL
- *   log <n>     niveau de log ESP (0 = rien … 5 = verbeux)
+ * Diagnostic console (serial at 115200 baud, or TCP in workshop mode; one command per line).
+ *   status      internal heap / PSRAM, FPS, battery, uptime, revision
+ *   screenshot  LVGL capture of the current screen, sent as base64 (tools/kg.py)
+ *   sleep|wake  turns the screen off / on
+ *   bl <n>      backlight 8..255
+ *   timeout <s> screen timeout
+ *   battlog     battery-life log of the last period on battery
+ *   face <n>    shows face n (0 aviator, 1 circuits, 2 night)
+ *   launcher    opens the app launcher
+ *   app <name>  opens an app (chrono, timer, alarms, steps, weather, settings)
+ *   ring <alarm|timer>  alert screen + ringing (test)
+ *   timer <s>   starts the timer (deadline test)
+ *   battsim <0|1>  simulates battery on USB (light-sleep test)
+ *   power [min]    measures current on USB, with simulated battery and the screen off
+ *   weather [refresh]   latest weather reading
+ *   bus [refresh | stops <codes>]  next departures, followed stops
+ *   ble [on | off | forget]  BLE state, ANCS counters, notifications
+ *   beep        short beep (speaker test)
+ *   egg         triggers the Time circuits discharge
+ *   coredump [erase]  summary of the last crash (and erase it)
+ *   reboot      reboots the watch
+ *   diag        shows the stage 0 diagnostic screen
+ *   touch [s]   prints touch points for s seconds (10 by default)
+ *   lcdtest     red | green | blue pattern for 5 s, outside LVGL
+ *   log <n>     ESP log level (0 = none … 5 = verbose)
  *   help
  */
 #include "../hal.h"
@@ -42,7 +45,7 @@
 #include <WiFi.h>
 #include <mbedtls/base64.h>
 
-/* La console répond sur le flux d'où vient la commande : série USB ou TCP (mode atelier). */
+/* The console answers on the stream the command came from: USB serial or TCP (workshop mode). */
 static Print *s_out = &Serial;
 
 struct line_buf {
@@ -62,7 +65,7 @@ static void cmd_status(void)
     char gbuf[120];
     s_out->printf("rev=V%d uptime=%lus reset=%d rom=%d\n", inv->rev, (unsigned long)(millis() / 1000), (int)esp_reset_reason(),
                   (int)rtc_get_reset_reason(0));
-    s_out->printf("garde : %s\n", guard_report(gbuf, sizeof gbuf));
+    s_out->printf("guard: %s\n", guard_report(gbuf, sizeof gbuf));
     s_out->printf("heap_internal free=%u/%u (%u%%) min=%u largest=%u\n", (unsigned)int_free,
                   (unsigned)int_total, (unsigned)(int_free * 100 / int_total),
                   (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -93,13 +96,13 @@ static void cmd_status(void)
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, hal_time_valid(), net_status());
 }
 
-/* Écrit tout le tampon : sur TCP, write() peut n'en accepter qu'une partie quand le
- * tampon d'envoi lwIP est plein ; on réessaie (2 s max) au lieu de perdre des octets. */
+/* Writes the whole buffer: over TCP, write() may accept only part of it when lwIP's send
+ * buffer is full; retry (2 s max) rather than lose bytes. */
 static void write_all(const uint8_t *data, size_t len)
 {
     uint32_t t0 = millis();
     while (len && millis() - t0 < 2000) {
-        esp_task_wdt_reset(); /* commandes longues (capture ~9 s en Wi-Fi) : nourrir le chien de garde */
+        esp_task_wdt_reset(); /* long commands (a capture takes ~9 s over Wi-Fi): feed the watchdog */
         size_t n = s_out->write(data, len);
         data += n;
         len -= n;
@@ -109,7 +112,7 @@ static void write_all(const uint8_t *data, size_t len)
 
 static void print_all(const char *text) { write_all((const uint8_t *)text, strlen(text)); }
 
-/* Format : "KGSHOT <w> <h> rgb565 swap=<0|1>", puis "R<y>:<base64>" par rangée, "KGSHOT END". */
+/* Format: "KGSHOT <w> <h> rgb565 swap=<0|1>", then "R<y>:<base64>" per row, "KGSHOT END". */
 static void cmd_screenshot(void)
 {
     lv_obj_t *scr = lv_scr_act();
@@ -132,7 +135,7 @@ static void cmd_screenshot(void)
         size_t olen = 0;
         mbedtls_base64_encode(line, sizeof line, &olen, buf + y * w * 2, w * 2);
         char head[8];
-        snprintf(head, sizeof head, "R%d:", y); /* index de rangée : les lignes de log intercalées sont ignorées */
+        snprintf(head, sizeof head, "R%d:", y); /* row index: interleaved log lines are ignored */
         print_all(head);
         line[olen] = '\n';
         write_all(line, olen + 1);
@@ -141,36 +144,36 @@ static void cmd_screenshot(void)
     heap_caps_free(buf);
 }
 
-/* Résumé du dernier plantage enregistré en flash (partition coredump). Les adresses se
- * décodent sur le Mac : xtensa-esp32-elf-addr2line -pfiaC -e firmware.elf <adresses>. */
+/* Summary of the last crash stored in flash (coredump partition). Decode the addresses on the
+ * Mac: xtensa-esp32-elf-addr2line -pfiaC -e firmware.elf <addresses>. */
 static void cmd_coredump(bool erase)
 {
     if (esp_core_dump_image_check() != ESP_OK) {
-        s_out->println("coredump : aucun");
+        s_out->println("coredump: none");
         return;
     }
     auto *sum = static_cast<esp_core_dump_summary_t *>(malloc(sizeof(esp_core_dump_summary_t)));
     if (sum && esp_core_dump_get_summary(sum) == ESP_OK) {
-        s_out->printf("coredump : tâche=%s pc=0x%08lx cause=%lu vaddr=0x%08lx elf=%.16s\n", sum->exc_task,
+        s_out->printf("coredump: task=%s pc=0x%08lx cause=%lu vaddr=0x%08lx elf=%.16s\n", sum->exc_task,
                       (unsigned long)sum->exc_pc, (unsigned long)sum->ex_info.exc_cause,
                       (unsigned long)sum->ex_info.exc_vaddr, (const char *)sum->app_elf_sha256);
-        s_out->print("backtrace :");
+        s_out->print("backtrace:");
         for (uint32_t i = 0; i < sum->exc_bt_info.depth; i++) s_out->printf(" 0x%08lx", (unsigned long)sum->exc_bt_info.bt[i]);
-        s_out->println(sum->exc_bt_info.corrupted ? " (corrompue)" : "");
+        s_out->println(sum->exc_bt_info.corrupted ? " (corrupted)" : "");
     }
     free(sum);
     if (erase) {
         esp_core_dump_image_erase();
-        s_out->println("coredump effacé");
+        s_out->println("coredump erased");
     }
 }
 
-/* Image coredump brute (ELF) en base64, pour espcoredump.py sur le Mac. */
+/* Raw coredump image (ELF) as base64, for espcoredump.py on the Mac. */
 static void cmd_coredump_raw(void)
 {
     size_t addr = 0, size = 0;
     if (esp_core_dump_image_get(&addr, &size) != ESP_OK) {
-        s_out->println("COREDUMP ERR aucun");
+        s_out->println("COREDUMP ERR none");
         return;
     }
     const esp_partition_t *part =
@@ -198,12 +201,12 @@ static void cmd_coredump_raw(void)
 
 static void run(char *cmd)
 {
-    if (*cmd) lv_disp_trig_activity(nullptr); /* une commande = de l'activité : pas d'extinction en plein test */
+    if (*cmd) lv_disp_trig_activity(nullptr); /* a command counts as activity: no screen-off in the middle of a test */
     if (!strcmp(cmd, "status")) cmd_status();
     else if (!strcmp(cmd, "screenshot")) cmd_screenshot();
     else if (!strcmp(cmd, "battlog")) battlog_print(*s_out);
     else if (!strcmp(cmd, "reboot")) {
-        s_out->println("redémarrage");
+        s_out->println("rebooting");
         delay(100);
         ESP.restart();
     }
@@ -213,14 +216,14 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "face ", 5)) {
         power_force(true);
         ui_faces_show(atoi(cmd + 5), true);
-        s_out->printf("cadran %s\n", ui_faces_name(ui_faces_current()));
+        s_out->printf("face %s\n", ui_faces_name(ui_faces_current()));
     } else if (!strcmp(cmd, "egg")) face_circuits_discharge();
     else if (!strcmp(cmd, "launcher")) {
         power_force(true);
         ui_nav_open_launcher();
     } else if (!strncmp(cmd, "app ", 4)) {
         power_force(true);
-        s_out->println(ui_nav_open_app(cmd + 4) ? "ok" : "app inconnue (ou transition en cours)");
+        s_out->println(ui_nav_open_app(cmd + 4) ? "ok" : "unknown app (or transition running)");
     } else if (!strncmp(cmd, "ring ", 5)) {
         power_force(true);
         ui_nav_test_alert(!strcmp(cmd + 5, "alarm"));
@@ -230,41 +233,41 @@ static void run(char *cmd)
         s_out->println("ok");
     } else if (!strncmp(cmd, "battsim ", 8)) {
         power_battery_sim(atoi(cmd + 8));
-        s_out->println("ok (console série seulement : le Wi-Fi va se couper)");
-    } else if (!strcmp(cmd, "conso")) {
+        s_out->println("ok (serial console only: Wi-Fi is about to switch off)");
+    } else if (!strcmp(cmd, "power")) {
         power_measure_print(*s_out);
-    } else if (!strncmp(cmd, "conso ", 6)) {
+    } else if (!strncmp(cmd, "power ", 6)) {
         power_measure_start(atoi(cmd + 6));
-        s_out->println("ok : Wi-Fi coupé pendant la mesure, console de retour à la fin");
-    } else if (!strcmp(cmd, "meteo") || !strcmp(cmd, "meteo maj")) {
-        if (cmd[5]) hal_weather_refresh(0);
+        s_out->println("ok: Wi-Fi off during the measurement, the console comes back at the end");
+    } else if (!strcmp(cmd, "weather") || !strcmp(cmd, "weather refresh")) {
+        if (cmd[7]) hal_weather_refresh(0);
         kg_weather_t wx;
         const char *st = hal_weather_status();
         if (hal_weather(&wx))
-            s_out->printf("météo %.1f° (ressenti %.1f°) %s, min %.1f max %.1f, relevé il y a %ld s%s%s\n", wx.temp,
+            s_out->printf("weather %.1f° (feels %.1f°) %s, low %.1f high %.1f, read %ld s ago%s%s\n", wx.temp,
                           wx.feels, kg_weather_label(wx.code), wx.tmin, wx.tmax, (long)(time(nullptr) - wx.fetched),
                           st ? " — " : "", st ? st : "");
-        else s_out->printf("météo : aucun relevé (%s)\n", st ? st : "?");
-        if (hal_weather_busy()) s_out->println("mise à jour en cours");
-    } else if (!strcmp(cmd, "bus") || !strcmp(cmd, "bus maj") || !strncmp(cmd, "bus arrets ", 11)) {
-        if (!strncmp(cmd, "bus arrets ", 11)) hal_bus_set_stops(cmd + 11);
+        else s_out->printf("weather: no reading (%s)\n", st ? st : "?");
+        if (hal_weather_busy()) s_out->println("update in progress");
+    } else if (!strcmp(cmd, "bus") || !strcmp(cmd, "bus refresh") || !strncmp(cmd, "bus stops ", 10)) {
+        if (!strncmp(cmd, "bus stops ", 10)) hal_bus_set_stops(cmd + 10);
         if (cmd[3]) hal_bus_refresh(0);
         kg_bus_t bus;
         const char *st = hal_bus_status();
-        s_out->printf("bus : arrêts « %s »%s%s (dernière erreur HTTP %d)\n", hal_bus_stops(), st ? " — " : "", st ? st : "",
+        s_out->printf("bus: stops \"%s\"%s%s (last HTTP error %d)\n", hal_bus_stops(), st ? " — " : "", st ? st : "",
                       net_bus_last_error());
         if (hal_bus(&bus)) {
             time_t now = time(nullptr);
             for (int i = 0; i < bus.n; i++)
-                s_out->printf("  %s à l'arrêt %s dans %ld s\n", bus.deps[i].route, bus.deps[i].stop, (long)(bus.deps[i].t - now));
+                s_out->printf("  %s at stop %s in %ld s\n", bus.deps[i].route, bus.deps[i].stop, (long)(bus.deps[i].t - now));
         }
     } else if (!strcmp(cmd, "ble") || !strncmp(cmd, "ble ", 4)) {
         if (!strcmp(cmd, "ble on")) hal_ble_enable(true);
         else if (!strcmp(cmd, "ble off")) hal_ble_enable(false);
-        else if (!strcmp(cmd, "ble oublier")) hal_ble_forget();
-        static const char *const ST[] = {"coupé", "en attente", "appairage", "connecté", "ANCS prêt"};
-        s_out->printf("ble : %s%s, %d notifications, tas interne libre %lu\n", ST[hal_ble_state()],
-                      guard_safe_mode() ? " (mode sans échec)" : "", hal_notif_count(),
+        else if (!strcmp(cmd, "ble forget")) hal_ble_forget();
+        static const char *const ST[] = {"off", "waiting", "pairing", "connected", "ANCS ready"};
+        s_out->printf("ble: %s%s, %d notifications, internal heap free %lu\n", ST[hal_ble_state()],
+                      guard_safe_mode() ? " (safe mode)" : "", hal_notif_count(),
                       (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
         ble_diag(*s_out);
         for (int i = 0; i < hal_notif_count(); i++) {
@@ -274,7 +277,7 @@ static void run(char *cmd)
     } else if (!strcmp(cmd, "beep")) {
         static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
         hal_tones(t, 3);
-        s_out->println(hal_sound_available() ? "ok" : "pas de haut-parleur");
+        s_out->println(hal_sound_available() ? "ok" : "no speaker");
     }
     else if (!strcmp(cmd, "sleep")) power_force(false);
     else if (!strcmp(cmd, "wake")) power_force(true);
@@ -286,7 +289,7 @@ static void run(char *cmd)
         int16_t x, y;
         while (millis() < end) {
             esp_task_wdt_reset();
-            lv_timer_handler(); /* fait tourner la lecture tactile */
+            lv_timer_handler(); /* keeps the touch polling running */
             if (touch_last(&x, &y)) s_out->printf("touch %d %d\n", x, y);
             delay(50);
         }
@@ -301,8 +304,8 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | conso [min] | face <n> | egg | launcher | app <nom> | ring <alarm|timer> | timer <s> | beep | meteo [maj] | bus [maj | arrets <codes>] | ble [on|off|oublier] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
-    else if (*cmd) s_out->printf("commande inconnue : %s\n", cmd);
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes>] | ble [on|off|forget] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    else if (*cmd) s_out->printf("unknown command: %s\n", cmd);
 }
 
 static void feed(Stream &in, Print &out, line_buf &lb)
@@ -322,7 +325,7 @@ static void feed(Stream &in, Print &out, line_buf &lb)
     }
 }
 
-/* Console TCP (port 2323), active seulement en mode atelier. */
+/* TCP console (port 2323), only active in workshop mode. */
 static WiFiServer s_server(2323);
 static WiFiClient s_client;
 static bool s_server_on;
@@ -343,7 +346,7 @@ void console_poll(void)
 {
     feed(Serial, Serial, s_serial_line);
     if (!s_server_on) return;
-    /* Un nouveau client remplace l'ancien : une déconnexion mal détectée ne bloque jamais la console. */
+    /* A new client replaces the old one: a missed disconnect never locks the console. */
     WiFiClient c = s_server.available();
     if (c) {
         if (s_client) s_client.stop();

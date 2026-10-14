@@ -1,4 +1,4 @@
-/* Réserve mémoire de LVGL : PSRAM sur la montre, malloc dans le simulateur. */
+/* LVGL memory pool: PSRAM on the watch, malloc in the simulator. */
 #pragma once
 #include <stddef.h>
 

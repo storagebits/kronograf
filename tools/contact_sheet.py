@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Planche contact de captures PNG 240×240 (RGB 8 bits), sans dépendance.
+"""Contact sheet of 240×240 PNG screenshots (8-bit RGB), dependency-free.
 
-  tools/contact_sheet.py sortie.png a.png b.png … [--cols 3] [--scale 2]
+  tools/contact_sheet.py out.png a.png b.png … [--cols 3] [--scale 2]
 """
 import argparse
 import struct
@@ -17,7 +17,7 @@ def read_png(path):
         body = data[pos + 8:pos + 8 + n]
         if kind == b"IHDR":
             w, h, depth, ctype = struct.unpack(">IIBB", body[:10])
-            assert depth == 8 and ctype in (2, 6), f"{path} : format non géré"
+            assert depth == 8 and ctype in (2, 6), f"{path}: unsupported format"
             bpp = 3 if ctype == 2 else 4
         elif kind == b"IDAT":
             idat += body
@@ -78,7 +78,7 @@ def main():
             for k in range(s):
                 canvas[oy + y * s + k][ox * 3:(ox + w * s) * 3] = scaled
     write_png(a.out, W, H, [bytes(r) for r in canvas])
-    print(f"planche {a.out} ({W}×{H})")
+    print(f"sheet {a.out} ({W}×{H})")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@
 #define R_OUT    119.5f  /* outer edge of the bezel */
 #define R_BEZEL  104.0f  /* inner edge of the bezel */
 #define R_TRACK   96.0f  /* inner edge of the railway track */
-#define R_SUB     22.0f  /* rayon des sous-cadrans */
+#define R_SUB     22.0f  /* sub-dial radius */
 
 #define SWEEP_MS 125     /* 8 Hz: mechanical sweep of the seconds hand */
 
@@ -30,9 +30,9 @@
 
 typedef struct { float x, y; } pt_t;
 
-static const pt_t SUB_BATT = {72, 120};    /* 9 h */
-static const pt_t SUB_CHRONO = {168, 120}; /* 3 h */
-static const pt_t SUB_STEPS = {120, 168};  /* 6 h */
+static const pt_t SUB_BATT = {72, 120};    /* 9 o'clock */
+static const pt_t SUB_CHRONO = {168, 120}; /* 3 o'clock */
+static const pt_t SUB_STEPS = {120, 168};  /* 6 o'clock */
 
 #define STEPS_GOAL 10000
 
@@ -49,17 +49,17 @@ static lv_color_t *s_bg;
 static hand_t s_hour, s_min, s_sec, s_batt, s_chrono, s_steps;
 static lv_obj_t *s_counterweight;
 static lv_obj_t *s_date, *s_weekday, *s_batt_pct, *s_hint, *s_wx_icon, *s_wx_temp, *s_notif;
-static float s_bezel_deg;      /* rotation de la lunette */
+static float s_bezel_deg;      /* bezel rotation */
 static lv_coord_t s_drag_last;
 static bool s_drag_on_bezel;   /* the current gesture belongs to the bezel */
 static lv_timer_t *s_timer;
 static int s_last_mday = -1;
 
-/* ---------------------------------------------------------------- fond */
+/* ----------------------------------------------------------- background */
 
 static inline float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-static inline lv_color_t mix(lv_color_t a, lv_color_t b, float t) /* t = part de b */
+static inline lv_color_t mix(lv_color_t a, lv_color_t b, float t) /* t = share of b */
 {
     return lv_color_mix(b, a, (uint8_t)(clampf(t, 0, 1) * 255));
 }
@@ -153,7 +153,7 @@ static void canvas_line(pt_t a, pt_t b, lv_coord_t w, lv_color_t color, lv_opa_t
     lv_canvas_draw_line(s_canvas, pts, 2, &d);
 }
 
-static pt_t polar(pt_t c, float r, float deg) /* 0° = midi, sens horaire */
+static pt_t polar(pt_t c, float r, float deg) /* 0° = noon, clockwise */
 {
     return (pt_t){c.x + r * sinf(DEG(deg)), c.y - r * cosf(DEG(deg))};
 }
@@ -178,7 +178,7 @@ static void canvas_ring(pt_t c, float r, lv_coord_t w, lv_color_t color, lv_opa_
     d.color = color;
     d.width = w;
     d.opa = opa;
-    /* lv_canvas_draw_arc : 0° = 3 h ; on convertit depuis 0° = midi. */
+    /* lv_canvas_draw_arc: 0° = 3 o'clock; convert from 0° = noon. */
     lv_canvas_draw_arc(s_canvas, (lv_coord_t)c.x, (lv_coord_t)c.y, (lv_coord_t)r,
                        (a_from + 270) % 360, (a_to + 270) % 360, &d);
 }
@@ -236,7 +236,7 @@ static void render_dial_marks(void)
     subdial(SUB_BATT, 11, 300, 5, NULL, "BAT");
     canvas_ring(SUB_BATT, R_SUB - 2, 2, KG_C_SECONDS, LV_OPA_80, -150, -90);
 
-    /* 3 h — compteur chrono 30 minutes. */
+    /* 3 o'clock — 30-minute stopwatch counter. */
     subdial(SUB_CHRONO, 30, 360, 5, "30", "MIN");
 
     /* 6 o'clock — today's steps, 10k goal. */
@@ -284,7 +284,7 @@ static void render_bezel(void)
     }
 }
 
-/* -------------------------------------------------------------- aiguilles */
+/* ------------------------------------------------------------------ hands */
 
 static lv_obj_t *make_line(lv_obj_t *parent, lv_coord_t w, lv_color_t color)
 {
@@ -468,7 +468,7 @@ static lv_obj_t *create(void)
     lv_obj_add_event_cb(s_canvas, bezel_drag, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(s_canvas, bezel_drag, LV_EVENT_PRESSING, NULL);
 
-    /* Guichet date et coins. */
+    /* Date window and corners. */
     pt_t dc = polar((pt_t){CX, CY}, 64, 135);
     s_date = lv_label_create(s_scr);
     lv_obj_set_style_text_font(s_date, &kg_font_text_16, 0);

@@ -1,4 +1,4 @@
-/* Racine TLS de api.stm.info : DigiCert Global Root G2 (expire le 2038-01-15).
+/* TLS root of api.stm.info: DigiCert Global Root G2 (expires 2038-01-15).
  * SHA-256 CB:3C:CB:B7:60:31:E5:E0:13:8F:8D:D3:9A:23:F9:DE:47:FF:C3:5E:43:C1:14:4C:EA:27:D4:6A:5A:B1:CB:5F */
 #pragma once
 static const char KG_STM_ROOT_CA[] =

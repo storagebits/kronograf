@@ -1,12 +1,13 @@
 #!/usr/bin/env -S sh -c 'exec "$(dirname "$0")/../.venv/bin/python" "$0" "$@"'
-"""Outil Mac pour la console série Kronograf.
+"""Mac tool for the Kronograf console.
 
-  tools/kg.py status                     envoie une commande et affiche la réponse
+  tools/kg.py status                     sends a command and prints the reply
   tools/kg.py screenshot docs/screens/device/t0-diag.png
   tools/kg.py --port /dev/cu.usbserial-XXXX status
-  tools/kg.py --host kronograf.local status    mode atelier (Wi-Fi)
+  tools/kg.py --host kronograf.local status    workshop mode (Wi-Fi)
 
-Le port est auto-détecté (premier /dev/cu.usbserial-* ou cu.wchusbserial*).
+The TCP console is used when kronograf.local answers; otherwise the serial port is
+auto-detected (first /dev/cu.usbserial-* or cu.wchusbserial*).
 """
 import argparse
 import socket
@@ -23,7 +24,7 @@ import serial
 def find_port():
     ports = sorted(glob.glob("/dev/cu.usbserial-*") + glob.glob("/dev/cu.wchusbserial*"))
     if not ports:
-        sys.exit("Aucun port série de montre trouvé")
+        sys.exit("No watch serial port found")
     return ports[0]
 
 
@@ -40,8 +41,8 @@ def open_tcp(host):
 
 
 def open_port(path):
-    # Sur macOS, ouvrir le port fait souvent redémarrer l'ESP32 (circuit d'auto-reset du CP210x).
-    # On écoute 1,5 s : si un démarrage est en cours, on attend « Kronograf prêt ».
+    # On macOS, opening the port often reboots the ESP32 (CP210x auto-reset circuit).
+    # Listen for 1.5 s: if a boot is in progress, wait for "Kronograf ready".
     s = serial.Serial()
     s.port = path
     s.baudrate = 115200
@@ -53,14 +54,14 @@ def open_port(path):
     booting = False
     while time.time() < end:
         line = s.readline().decode(errors="replace")
-        if "ets " in line or "Kronograf — démarrage" in line:
+        if "ets " in line or "Kronograf — booting" in line:
             booting = True
             end = time.time() + 15
-        if "Kronograf prêt" in line:
-            time.sleep(0.5)  # laisse passer les derniers logs de démarrage
+        if "Kronograf ready" in line:
+            time.sleep(0.5)  # let the last boot logs through
             break
     if booting:
-        time.sleep(4)  # synchro NTP en cours au démarrage : ses logs Wi-Fi arrivent vers 4 s
+        time.sleep(4)  # NTP sync running at boot: its Wi-Fi logs arrive around 4 s
     s.reset_input_buffer()
     s.timeout = 2
     return s
@@ -95,10 +96,10 @@ def screenshot(s, path):
         if line.startswith("KGSHOT "):
             break
         if time.time() > deadline:
-            sys.exit("Pas de réponse KGSHOT")
+            sys.exit("No KGSHOT reply")
     parts = line.split()
     if parts[1] == "ERR":
-        sys.exit(f"Erreur montre : {line}")
+        sys.exit(f"Watch error: {line}")
     w, h, swap = int(parts[1]), int(parts[2]), parts[4] == "swap=1"
     rows = {}
     s.timeout = 5
@@ -107,10 +108,10 @@ def screenshot(s, path):
         if line == "KGSHOT END":
             break
         if not line:
-            print(f"capture interrompue après {len(rows)} rangées", file=sys.stderr)
+            print(f"capture interrupted after {len(rows)} rows", file=sys.stderr)
             return False
         if not line.startswith("R") or ":" not in line:
-            continue  # ligne de log intercalée
+            continue  # interleaved log line
         idx, _, b64 = line[1:].partition(":")
         try:
             data = base64.b64decode(b64, validate=True)
@@ -120,23 +121,23 @@ def screenshot(s, path):
             rows[int(idx)] = data
     missing = [y for y in range(h) if y not in rows]
     if missing:
-        print(f"capture incomplète : {len(missing)} rangées manquantes (première : {missing[0]})", file=sys.stderr)
+        print(f"incomplete capture: {len(missing)} rows missing (first: {missing[0]})", file=sys.stderr)
         return False
     write_png(path, w, h, rgb565_to_rgb888(b"".join(rows[y] for y in range(h)), swap))
-    print(f"capture {path} ({w}×{h})")
+    print(f"screenshot {path} ({w}×{h})")
     return True
 
 
 def coredump_raw(s, path):
-    """Récupère l'image coredump (ELF) ; décoder avec :
-    esp-coredump info_corefile -t raw -c <fichier> .pio/build/<env>/firmware.elf"""
+    """Fetches the coredump image (ELF); decode it with:
+    esp-coredump info_corefile -t raw -c <file> .pio/build/<env>/firmware.elf"""
     s.write(b"coredump raw\n")
     s.timeout = 5
     chunks, size = {}, None
     while True:
         line = s.readline().decode(errors="replace").strip()
         if not line:
-            sys.exit("coredump interrompu")
+            sys.exit("coredump interrupted")
         if line.startswith("COREDUMP ERR"):
             sys.exit(line)
         if line.startswith("COREDUMP ") and line != "COREDUMP END":
@@ -148,9 +149,9 @@ def coredump_raw(s, path):
             chunks[int(off)] = base64.b64decode(b64)
     data = b"".join(chunks[k] for k in sorted(chunks))
     if size is None or len(data) != size:
-        sys.exit(f"coredump incomplet ({len(data)}/{size})")
+        sys.exit(f"incomplete coredump ({len(data)}/{size})")
     open(path, "wb").write(data)
-    print(f"coredump {path} ({size} octets)")
+    print(f"coredump {path} ({size} bytes)")
 
 
 def command(s, cmd, wait=1.0):
@@ -166,14 +167,14 @@ def command(s, cmd, wait=1.0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port")
-    ap.add_argument("--host", help="mode atelier : console TCP, ex. kronograf.local")
+    ap.add_argument("--host", help="workshop mode: TCP console, e.g. kronograf.local")
     ap.add_argument("cmd")
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     host = a.host
     if not host and not a.port:
-        # Ouvrir le port série redémarre la montre sur macOS (et efface le journal de
-        # batterie en mémoire) : la console TCP du mode atelier est préférée si elle répond.
+        # Opening the serial port reboots the watch on macOS (and wipes the in-memory battery
+        # log): the workshop TCP console is preferred when it answers.
         try:
             socket.create_connection(("kronograf.local", 2323), timeout=1.5).close()
             host = "kronograf.local"
@@ -183,9 +184,9 @@ def main():
     if a.cmd == "coredump-raw":
         coredump_raw(s, a.args[0] if a.args else "coredump.bin")
     elif a.cmd == "screenshot":
-        # Un log d'une autre tâche peut s'intercaler au milieu d'une rangée : on recommence.
+        # A log line from another task may land in the middle of a row: try again.
         if not any(screenshot(s, a.args[0] if a.args else "screenshot.png") for _ in range(3)):
-            sys.exit("Capture impossible après 3 essais")
+            sys.exit("Screenshot failed after 3 attempts")
     else:
         command(s, " ".join([a.cmd] + a.args))
 

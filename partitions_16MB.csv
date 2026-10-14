@@ -1,5 +1,5 @@
 # Name,    Type, SubType,  Offset,   Size
-# Deux slots OTA de 6 Mo, ~3,9 Mo de stockage (LittleFS : cache météo, ressources), coredump.
+# Two 6 MB OTA slots, ~3.9 MB of storage (LittleFS: weather cache, assets), coredump.
 nvs,       data, nvs,      0x9000,   0x5000
 otadata,   data, ota,      0xe000,   0x2000
 app0,      app,  ota_0,    0x10000,  0x600000

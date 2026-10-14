@@ -1,14 +1,14 @@
 /*
- * Modèle des secrets. Copier en include/secrets.h (ignoré par git) et remplir.
- * Une valeur vide désactive proprement la fonctionnalité correspondante.
+ * Secrets template. Copy to include/secrets.h (ignored by git) and fill in.
+ * An empty value cleanly disables the matching feature.
  */
 #pragma once
 
 #define KG_WIFI_SSID ""
 #define KG_WIFI_PASS ""
 
-/* Mode atelier (montre sur USB) : mot de passe des mises à jour OTA, facultatif mais conseillé. */
+/* Workshop mode (watch on USB): password for OTA updates, optional but recommended. */
 #define KG_OTA_PASS ""
 
-/* Tranche 4 : clé API STM (GTFS temps réel), facultative. */
+/* Optional STM API key (GTFS realtime) for bus departures. */
 #define KG_STM_API_KEY ""

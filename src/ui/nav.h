@@ -26,7 +26,7 @@ void ui_nav_init(void);         /* after ui_faces_start() */
 void ui_nav_open_launcher(void);
 void ui_nav_close_launcher(void); /* back to the face */
 bool ui_nav_open_app(const char *name);
-void ui_nav_back(void);         /* app → lanceur */
+void ui_nav_back(void);         /* app → launcher */
 bool ui_nav_on_face(void);
 
 /* Tests (console "ring", simulator): shows the alert screen and rings. */

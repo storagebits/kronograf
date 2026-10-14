@@ -1,6 +1,6 @@
 /*
- * Tactile FT6336 (I²C 0x38 sur Wire1, SDA 23 / SCL 32) → périphérique d'entrée LVGL.
- * Lecture en scrutation à la période LVGL (16 ms) uniquement quand l'écran est allumé.
+ * FT6336 touch panel (I²C 0x38 on Wire1, SDA 23 / SCL 32) → LVGL input device.
+ * Polled at the LVGL period (16 ms), only while the screen is on.
  */
 #include "board.h"
 #include "hal_device.h"
@@ -8,8 +8,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-/* En rotation 180° (setRotation(2)), la lib LilyGO utilise les coordonnées brutes ;
- * les dalles « PANEL_V1 » les inversent. Mettre à 1 si le toucher est en miroir. */
+/* With a 180° rotation (setRotation(2)) the LilyGO library uses raw coordinates;
+ * "PANEL_V1" panels invert them. Set to 1 if touch is mirrored. */
 #ifndef KG_TOUCH_FLIP
 #define KG_TOUCH_FLIP 0
 #endif
@@ -22,7 +22,7 @@ static bool s_pressed;
 static bool ft_read(int16_t *x, int16_t *y)
 {
     Wire1.beginTransmission(I2C_FT6336);
-    Wire1.write(0x02); /* TD_STATUS, puis P1_XH, P1_XL, P1_YH, P1_YL */
+    Wire1.write(0x02); /* TD_STATUS, then P1_XH, P1_XL, P1_YH, P1_YL */
     if (Wire1.endTransmission(false) != 0) return false;
     if (Wire1.requestFrom(I2C_FT6336, 5) != 5) return false;
     uint8_t n = Wire1.read() & 0x0F;

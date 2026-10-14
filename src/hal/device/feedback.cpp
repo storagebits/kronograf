@@ -1,10 +1,10 @@
 /*
- * Retours haptiques et sonores, non bloquants.
+ * Haptic and audio feedback, non-blocking.
  *
- *   Vibreur : motifs marche/arrêt cadencés par un esp_timer (aucun delay dans la boucle).
- *   Sons    : tâche dédiée ; séquences de notes en sinus avec attaque et relâche
- *             douces (pas de clic), I²S 16 kHz vers le MAX98357A. L'ampli (LDO3)
- *             n'est alimenté que pendant la lecture.
+ *   Vibration: on/off patterns clocked by an esp_timer (no delay in the loop).
+ *   Sounds:    dedicated task; sine-note sequences with soft attack and release (no
+ *              click), I²S at 16 kHz to the MAX98357A. The amplifier (LDO3) is only
+ *              powered while playing.
  */
 #include "../hal.h"
 #include "board.h"
@@ -14,7 +14,7 @@
 #include <esp_timer.h>
 #include <math.h>
 
-/* ------------------------------------------------------------------ vibreur */
+/* -------------------------------------------------------------- vibration */
 
 #define MAX_PATTERN 16
 static uint16_t s_pattern[MAX_PATTERN];
@@ -49,7 +49,7 @@ void hal_vibrate_pattern(const uint16_t *ms, uint8_t n)
 
 void hal_vibrate(uint16_t ms) { hal_vibrate_pattern(&ms, 1); }
 
-/* -------------------------------------------------------------------- sons */
+/* ----------------------------------------------------------------- sounds */
 
 #define MAX_TONES 24
 #define SAMPLE_RATE 16000
@@ -81,7 +81,7 @@ static void i2s_start(void)
     cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
     cfg.dma_buf_count = 4;
     cfg.dma_buf_len = 256;
-    cfg.tx_desc_auto_clear = true; /* silence si la tâche prend du retard */
+    cfg.tx_desc_auto_clear = true; /* silence if the task falls behind */
     i2s_pin_config_t pins = {};
     pins.bck_io_num = PIN_I2S_BCK;
     pins.ws_io_num = PIN_I2S_WS;
@@ -103,7 +103,7 @@ static void play_tone(const kg_tone_t &t)
 {
     static int16_t buf[256];
     uint32_t total = (uint32_t)SAMPLE_RATE * t.ms / 1000;
-    uint32_t ramp = SAMPLE_RATE * 6 / 1000; /* 6 ms d'attaque et de relâche */
+    uint32_t ramp = SAMPLE_RATE * 6 / 1000; /* 6 ms attack and release */
     float phase = 0, step = 2.0f * (float)M_PI * t.hz / SAMPLE_RATE;
     for (uint32_t done = 0; done < total;) {
         uint32_t n = total - done > 256 ? 256 : total - done;
@@ -126,12 +126,12 @@ static void audio_task(void *)
     for (;;) {
         if (xQueueReceive(s_audio_q, &job, portMAX_DELAY) != pdTRUE) continue;
         pmu_audio_power(true);
-        vTaskDelay(pdMS_TO_TICKS(20)); /* stabilisation de l'ampli */
+        vTaskDelay(pdMS_TO_TICKS(20)); /* let the amplifier settle */
         i2s_start();
         do {
             for (uint8_t i = 0; i < job.n; i++) play_tone(job.tones[i]);
         } while (xQueueReceive(s_audio_q, &job, pdMS_TO_TICKS(300)) == pdTRUE);
-        play_tone({0, 40}); /* vide les tampons DMA avant de couper */
+        play_tone({0, 40}); /* flush the DMA buffers before powering down */
         i2s_stop();
         pmu_audio_power(false);
     }
@@ -164,7 +164,7 @@ void feedback_init(void)
 #endif
 #ifdef PIN_I2S_DOUT
     s_audio_q = xQueueCreate(2, sizeof(tone_job));
-    /* Cœur 0, priorité moyenne : le son ne doit pas hacher, l'UI reste sur le cœur 1. */
+    /* Core 0, medium priority: sound must not stutter; the UI stays on core 1. */
     xTaskCreatePinnedToCore(audio_task, "kg_audio", 3072, nullptr, 5, nullptr, 0);
 #endif
 }

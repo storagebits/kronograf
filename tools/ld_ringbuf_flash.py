@@ -1,15 +1,15 @@
-# PlatformIO (extra_scripts, pre) : libère ~3,8 Ko d'IRAM pour la pile BLE.
+# PlatformIO (extra_scripts, pre): frees ~3.8 KB of IRAM for the BLE stack.
 #
-# Le sections.ld précompilé d'Arduino-ESP32 2.0.17 place esp_ringbuf en IRAM ; avec le
-# contrôleur BLE lié, l'IRAM déborde de ~2,9 Ko. On génère une copie du script où
-# esp_ringbuf part en flash — l'équivalent de CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH,
-# option officielle d'ESP-IDF, sûre ici car aucune interruption en IRAM n'utilise de tampon
-# circulaire (l'ISR UART d'Arduino n'est pas en IRAM : CONFIG_UART_ISR_IN_IRAM n'est pas
-# défini). Le script modifié est placé devant celui du framework dans le chemin de l'éditeur
-# de liens ; il est régénéré à chaque compilation, donc suit les mises à jour du framework.
+# Arduino-ESP32 2.0.17's precompiled sections.ld puts esp_ringbuf in IRAM; with the BLE
+# controller linked in, IRAM overflows by ~2.9 KB. This generates a copy of the script with
+# esp_ringbuf moved to flash — the equivalent of ESP-IDF's official
+# CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH option, safe here because no IRAM interrupt uses a
+# ring buffer (Arduino's UART ISR is not in IRAM: CONFIG_UART_ISR_IN_IRAM is not defined).
+# The modified script is placed ahead of the framework's in the linker search path; it is
+# regenerated on every build, so it follows framework updates.
 import os
 
-Import("env")  # noqa: F821  (fourni par PlatformIO)
+Import("env")  # noqa: F821  (provided by PlatformIO)
 
 fw = env.PioPlatform().get_package_dir("framework-arduinoespressif32")  # noqa: F821
 src = os.path.join(fw, "tools", "sdk", "esp32", "ld", "sections.ld")
@@ -18,7 +18,7 @@ os.makedirs(out_dir, exist_ok=True)
 
 text = open(src).read()
 iram_rule = "    *libesp_ringbuf.a:(.literal .literal.* .text .text.*)\n"
-assert text.count(iram_rule) == 1, "sections.ld inattendu : règle IRAM d'esp_ringbuf introuvable"
+assert text.count(iram_rule) == 1, "unexpected sections.ld: esp_ringbuf IRAM rule not found"
 text = text.replace(iram_rule, "")
 text = text.replace("EXCLUDE_FILE(*libesp_ringbuf.a ", "EXCLUDE_FILE(")
 open(os.path.join(out_dir, "sections.ld"), "w").write(text)

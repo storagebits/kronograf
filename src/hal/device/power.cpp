@@ -1,12 +1,12 @@
 /*
- * Gestion d'énergie et réveils.
+ * Power management and wake-ups.
  *
- *   ACTIF   écran allumé, CPU 240 MHz, LVGL à pleine cadence
- *   ÉTEINT  rétroéclairage 0, ST7789 en SLPIN, LVGL figé ;
- *           sur batterie : sommeil léger (réveil bouton / poignet levé / double tap) ;
- *           sur USB : CPU 80 MHz sans sommeil, pour garder la console série.
+ *   ACTIVE  screen on, CPU at 240 MHz, LVGL at full rate
+ *   OFF     backlight 0, ST7789 in SLPIN, LVGL frozen;
+ *           on battery: light sleep (wake on button / wrist raise / double tap);
+ *           on USB: CPU at 80 MHz without sleep, to keep the serial console.
  *
- * Interdits (DECISIONS D6) : aucun rail de l'AXP202 n'est modifié ici.
+ * Forbidden (DECISIONS D6): no AXP202 rail is ever changed here.
  */
 #include "../hal.h"
 #include "board.h"
@@ -28,30 +28,30 @@ static volatile bool s_bma_irq, s_axp_irq;
 static bool s_screen_on = true;
 static uint32_t s_timeout_ms = 10000;
 static uint8_t s_brightness = 160;
-static uint8_t s_scale_pct = 100; /* demandé par le cadran affiché */
+static uint8_t s_scale_pct = 100; /* requested by the face on screen */
 
 static uint8_t effective_brightness(void) { return (uint8_t)(s_brightness * s_scale_pct / 100 < 6 ? 6 : s_brightness * s_scale_pct / 100); }
 static uint32_t s_wake_ms;
-static const char *s_wake_reason = "démarrage";
+static const char *s_wake_reason = "boot";
 static uint32_t s_light_sleeps, s_wakes;
-static volatile time_t s_wake_at; /* réveil programmé (alarme, minuteur) */
+static volatile time_t s_wake_at; /* scheduled wake-up (alarm, timer) */
 static bool s_usb_stable = true;
 static bool s_usb_raw_last = true;
 static uint32_t s_usb_change_ms;
 
 void hal_schedule_wakeup(time_t when) { s_wake_at = when; }
 
-/* ------------------------------------------------------ journal d'autonomie
- * Démarre au débranchement de l'USB, un échantillon par minute (RAM : perdu au
- * redémarrage, conservé pendant le sommeil léger). */
+/* ------------------------------------------------------------ battery log
+ * Starts when USB is unplugged, one sample per minute (in RAM: lost on reboot, kept
+ * through light sleep). */
 static constexpr float BATTERY_MAH = 380.0f; /* LiPo T-Watch 2020 */
 struct batt_sample {
-    uint32_t t_s;      /* secondes depuis le débranchement */
+    uint32_t t_s;      /* seconds since unplugging */
     uint16_t mv;
-    float mah;         /* consommés depuis le débranchement */
-    uint32_t screen_s; /* temps écran allumé cumulé */
+    float mah;         /* used since unplugging */
+    uint32_t screen_s; /* cumulated screen-on time */
 };
-static constexpr int BATTLOG_N = 1440; /* 24 h à 1 / min */
+static constexpr int BATTLOG_N = 1440; /* 24 h at 1 / min */
 static batt_sample *s_log;
 static int s_log_n;
 static bool s_on_battery;
@@ -71,7 +71,7 @@ static void battlog_tick(bool usb)
         s_on_battery = false;
         return;
     }
-    if (!s_on_battery) { /* débranchement : nouvelle campagne */
+    if (!s_on_battery) { /* unplugged: new run */
         s_on_battery = true;
         s_unplug_ms = millis();
         s_unplug_mah = pmu_discharged_mah();
@@ -91,24 +91,24 @@ static void battlog_tick(bool usb)
 void battlog_print(Print &out)
 {
     if (!s_log_n) {
-        out.println("battlog : aucune campagne (débrancher l'USB pour en démarrer une)");
+        out.println("battlog: no run yet (unplug USB to start one)");
         return;
     }
     const batt_sample &a = s_log[0], &z = s_log[s_log_n - 1];
     float hours = (z.t_s - a.t_s) / 3600.0f;
     float avg_ma = hours > 0 ? z.mah / hours : 0;
-    out.printf("battlog : %d échantillons, %.2f h, %.1f mAh, moyenne %.2f mA, écran %lu s (%.1f %%), %u→%u mV\n",
+    out.printf("battlog: %d samples, %.2f h, %.1f mAh, average %.2f mA, screen %lu s (%.1f %%), %u→%u mV\n",
                s_log_n, hours, z.mah, avg_ma, (unsigned long)z.screen_s,
                hours > 0 ? 100.0f * z.screen_s / (hours * 3600) : 0, a.mv, z.mv);
-    if (avg_ma > 0) out.printf("autonomie estimée à cet usage : %.1f h (%.0f mAh)\n", BATTERY_MAH / avg_ma, BATTERY_MAH);
+    if (avg_ma > 0) out.printf("estimated battery life at this usage: %.1f h (%.0f mAh)\n", BATTERY_MAH / avg_ma, BATTERY_MAH);
     for (int i = 0; i < s_log_n; i += (s_log_n > 60 ? s_log_n / 60 : 1))
-        out.printf("  t=%5lus %4umV %6.2fmAh ecran=%lus\n", (unsigned long)s_log[i].t_s, s_log[i].mv, s_log[i].mah,
+        out.printf("  t=%5lus %4umV %6.2fmAh screen=%lus\n", (unsigned long)s_log[i].t_s, s_log[i].mv, s_log[i].mah,
                    (unsigned long)s_log[i].screen_s);
 }
 
-/* Changer la fréquence CPU à chaud avec le Wi-Fi actif casse la pile Wi-Fi sous
- * Arduino-ESP32 (blocage de la tâche wifi, chien de garde) : on ne change qu'en cas de
- * besoin réel, et jamais Wi-Fi allumé. */
+/* Changing the CPU frequency on the fly with Wi-Fi active breaks the Wi-Fi stack under
+ * Arduino-ESP32 (wifi task stalls, watchdog): only change it when really needed, and never
+ * with Wi-Fi on. */
 static void set_cpu_mhz(uint32_t mhz)
 {
     if (getCpuFrequencyMhz() == mhz) return;
@@ -119,10 +119,10 @@ static void set_cpu_mhz(uint32_t mhz)
 static void IRAM_ATTR on_bma_irq() { s_bma_irq = true; }
 static void IRAM_ATTR on_axp_irq() { s_axp_irq = true; }
 
-/* ------------------------------------------------------------- pas du jour */
+/* ------------------------------------------------------------ daily steps */
 
-/* Le BMA423 garde son compteur tant qu'il est alimenté (redémarrages ESP compris).
- * On le remet à zéro au premier passage d'un nouveau jour, date mémorisée en NVS. */
+/* The BMA423 keeps its counter while powered (ESP reboots included). It is reset the first
+ * time a new day is seen, with the date saved in NVS. */
 static void steps_midnight_check(void)
 {
     if (!s_bma_ok || !hal_time_valid()) return;
@@ -133,15 +133,15 @@ static void steps_midnight_check(void)
     p.begin("kg", false);
     int last = p.getInt("steps_day", 0);
     if (last != day) {
-        /* Historique glissant : st0 = hier … st6 = il y a 7 jours. Le compte courant appartient
-         * au jour « last » ; s'il y a plus d'un jour d'écart, les jours manqués valent 0. */
+        /* Rolling history: st0 = yesterday … st6 = 7 days ago. The current count belongs to day
+         * "last"; when more than one day has passed, the missed days count as 0. */
         uint32_t hist[7];
         for (int i = 0; i < 7; i++) hist[i] = p.getUInt(("st" + String(i)).c_str(), 0);
-        int gap = last ? 1 : 0; /* premier démarrage : pas d'historique à décaler */
+        int gap = last ? 1 : 0; /* first boot: no history to shift */
         if (last) {
             struct tm lt = {};
             lt.tm_year = last / 1000 - 1900;
-            lt.tm_mday = last % 1000 + 1; /* tm_yday → jour du mois 1 de janvier + yday */
+            lt.tm_mday = last % 1000 + 1; /* tm_yday → day of month: January 1 + yday */
             lt.tm_isdst = -1;
             time_t a = mktime(&lt);
             struct tm nt = {};
@@ -152,8 +152,8 @@ static void steps_midnight_check(void)
             gap = (int)((b - a + 43200) / 86400);
             if (gap < 1) gap = 1;
         }
-        /* Après `gap` décalages, le compte du jour « last » est au rang gap-1, précédé de
-         * zéros pour les jours où la montre n'a pas tourné. */
+        /* After `gap` shifts, day "last"'s count sits at index gap-1, preceded by zeros for the
+         * days the watch was not running. */
         for (int k = 0; k < gap && k < 7; k++) {
             memmove(&hist[1], &hist[0], 6 * sizeof hist[0]);
             hist[0] = k == 0 ? s_bma.getPedometerCounter() : 0;
@@ -176,7 +176,7 @@ void hal_steps_history(uint32_t out[7])
 
 uint32_t hal_steps_today(void) { return s_bma_ok ? s_bma.getPedometerCounter() : 0; }
 
-/* ------------------------------------------------------------------ init */
+/* ------------------------------------------------------------------- init */
 
 void power_init(void)
 {
@@ -184,18 +184,18 @@ void power_init(void)
     if (s_bma_ok) {
         s_bma.configAccelerometer(SensorBMA423::RANGE_2G, SensorBMA423::ODR_100HZ);
         s_bma.enableAccelerometer();
-        s_bma.setReampAxes(SensorBMA423::REMAP_TOP_LAYER_RIGHT_CORNER /* 0x88 = axes identité (à valider : poignet levé) */);
+        s_bma.setReampAxes(SensorBMA423::REMAP_TOP_LAYER_RIGHT_CORNER /* 0x88 = identity axes (to validate: wrist raise) */);
         s_bma.enablePedometer();
         s_bma.enableFeature(SensorBMA423::FEATURE_STEP_CNTR | SensorBMA423::FEATURE_TILT |
                                 SensorBMA423::FEATURE_WAKEUP, true);
         s_bma.enableTiltIRQ();
         s_bma.enableWakeupIRQ();
-        s_bma.configInterrupt(); /* INT1, niveau haut, push-pull */
+        s_bma.configInterrupt(); /* INT1, active high, push-pull */
         s_bma.readIrqStatus();
         pinMode(PIN_BMA_INT, INPUT);
         attachInterrupt(PIN_BMA_INT, on_bma_irq, RISING);
     } else {
-        log_e("BMA423 : initialisation impossible");
+        log_e("BMA423: initialisation failed");
     }
 
     s_usb_stable = s_usb_raw_last = hal_battery().usb;
@@ -219,7 +219,7 @@ static void screen_off(void)
     if (s_screen_on_since) s_screen_ms_total += millis() - s_screen_on_since;
     s_screen_on_since = 0;
     Serial.println("event sleep");
-    for (int b = effective_brightness(); b > 0; b -= 16) { /* extinction douce, ~80 ms */
+    for (int b = effective_brightness(); b > 0; b -= 16) { /* soft fade-out, ~80 ms */
         hal_backlight(b);
         delay(8);
     }
@@ -242,7 +242,7 @@ static void screen_on(const char *reason)
     display_sleep(false);
     steps_midnight_check();
     lv_obj_invalidate(lv_scr_act());
-    lv_timer_handler();               /* l'heure a sauté pendant la veille : redessiner avant d'éclairer */
+    lv_timer_handler();               /* time jumped while asleep: redraw before lighting up */
     lv_refr_now(nullptr);
     for (int b = 16; b < effective_brightness(); b += 24) {
         hal_backlight(b);
@@ -251,23 +251,23 @@ static void screen_on(const char *reason)
     hal_backlight(effective_brightness());
 }
 
-/* Sommeil léger jusqu'au prochain réveil matériel. Retourne la raison. */
+/* Light sleep until the next hardware wake-up. Returns the reason. */
 static const char *light_sleep(void)
 {
-    s_bma.readIrqStatus(); /* libère INT1 avant de s'endormir */
+    s_bma.readIrqStatus(); /* release INT1 before sleeping */
     pmu_clear_irq();
     s_bma_irq = s_axp_irq = false;
-    /* Interruptions GPIO coupées pendant le sommeil : le réveil exige des types « niveau »,
-     * et une interruption niveau encore active au réveil (bouton tenu, INT de l'AXP202
-     * maintenue jusqu'à l'acquittement I²C) se redéclencherait sans fin — tempête qui
-     * fige la montre au premier appui (B3). Le réveil GPIO n'a pas besoin de l'ISR. */
+    /* GPIO interrupts are disabled during sleep: wake-up needs "level" types, and a level
+     * interrupt still active on wake-up (button held, AXP202 INT held until the I²C ack)
+     * would fire endlessly — a storm that freezes the watch on the first press (B3).
+     * GPIO wake-up does not need the ISR. */
     gpio_intr_disable((gpio_num_t)PIN_AXP_INT);
     gpio_intr_disable((gpio_num_t)PIN_BMA_INT);
     gpio_wakeup_enable((gpio_num_t)PIN_AXP_INT, GPIO_INTR_LOW_LEVEL);
     gpio_wakeup_enable((gpio_num_t)PIN_BMA_INT, GPIO_INTR_HIGH_LEVEL);
     esp_sleep_enable_gpio_wakeup();
-    /* Réveil minuté : au plus tard dans 60 s (minuit, VBUS, journal), plus tôt si une
-     * alarme ou un minuteur tombe avant. */
+    /* Timed wake-up: within 60 s at most (midnight, VBUS, log), sooner if an alarm or a
+     * timer is due first. */
     uint64_t us = 60ULL * 1000 * 1000;
     time_t now = time(nullptr);
     if (s_wake_at > now && (uint64_t)(s_wake_at - now) * 1000000ULL < us) us = (uint64_t)(s_wake_at - now) * 1000000ULL;
@@ -283,9 +283,9 @@ static const char *light_sleep(void)
     esp_light_sleep_start();
     guard_suspend(false);
     guard_crumb(KG_CRUMB_POST_SLEEP);
-    /* gpio_wakeup_disable() remet le type d'interruption à « aucune » : sans cette
-     * restauration, après un premier sommeil léger le bouton et le poignet ne réveillent
-     * plus rien tant que la montre reste éveillée (ex. branchée en USB). */
+    /* gpio_wakeup_disable() resets the interrupt type to "none": without restoring it, after
+     * a first light sleep the button and the wrist wake nothing while the watch stays awake
+     * (e.g. on USB). */
     gpio_wakeup_disable((gpio_num_t)PIN_AXP_INT);
     gpio_wakeup_disable((gpio_num_t)PIN_BMA_INT);
     gpio_set_intr_type((gpio_num_t)PIN_AXP_INT, GPIO_INTR_NEGEDGE);
@@ -300,7 +300,7 @@ static const char *light_sleep(void)
     return "gpio";
 }
 
-/* Traite les interruptions ; retourne la raison du réveil s'il y en a une. */
+/* Handles interrupts; returns the wake-up reason, if any. */
 static const char *poll_irqs(void)
 {
     const char *reason = nullptr;
@@ -309,10 +309,10 @@ static const char *poll_irqs(void)
         uint32_t what = pmu_read_irq();
         if (what & PMU_IRQ_BUTTON) {
             if (s_screen_on && millis() - s_wake_ms > 400) {
-                screen_off(); /* bouton écran allumé : on éteint */
+                screen_off(); /* button with the screen on: turn it off */
                 return nullptr;
             }
-            reason = "bouton";
+            reason = "button";
         } else if (what & PMU_IRQ_VBUS) {
             reason = "usb";
         }
@@ -320,15 +320,15 @@ static const char *poll_irqs(void)
     if (s_bma_irq && s_bma_ok) {
         s_bma_irq = false;
         s_bma.readIrqStatus();
-        if (s_bma.isTilt()) reason = "poignet";
+        if (s_bma.isTilt()) reason = "wrist";
         else if (s_bma.isDoubleTap()) reason = "double tap";
     }
     return reason;
 }
 
-/* USB « stable » : il faut 3 s d'état constant pour basculer. Le connecteur de la montre
- * fait des micro-coupures ; sans anti-rebond, le Wi-Fi atelier s'allumait/s'éteignait en
- * boucle et la montre entrait en sommeil léger entre deux. */
+/* "Stable" USB: the state must hold for 3 s before switching. The watch connector has
+ * micro-dropouts; without debouncing, workshop Wi-Fi kept toggling and the watch slipped
+ * into light sleep in between. */
 
 static void usb_debounce(void)
 {
@@ -340,15 +340,15 @@ static void usb_debounce(void)
     if (raw != s_usb_stable && millis() - s_usb_change_ms >= 3000) s_usb_stable = raw;
 }
 
-/* Test : simule la batterie sur USB (Wi-Fi coupé, sommeil léger actif). */
+/* Test: simulate battery on USB (Wi-Fi off, light sleep enabled). */
 static bool s_batt_sim;
 void power_battery_sim(bool on) { s_batt_sim = on; }
 
 bool power_usb_stable(void) { return s_usb_stable && !s_batt_sim; }
 
-/* Mesure de consommation sans débrancher : batterie simulée (Wi-Fi coupé, écran éteint)
- * pendant N minutes, en intégrant le courant VBUS. Batterie pleine et sans charge, le
- * courant VBUS est la consommation de la montre. Le Wi-Fi atelier revient à la fin. */
+/* Power measurement without unplugging: simulated battery (Wi-Fi off, screen off) for N
+ * minutes, integrating the VBUS current. With a full battery that is not charging, the
+ * VBUS current is the watch's consumption. Workshop Wi-Fi comes back at the end. */
 static uint32_t s_meas_start, s_meas_ms, s_meas_last, s_meas_n, s_meas_screen_ms, s_meas_charging;
 static double s_meas_sum;
 static float s_meas_max;
@@ -373,16 +373,16 @@ static void measure_tick(void)
     if (now - s_meas_start >= s_meas_ms) {
         s_meas_ms = 0;
         s_batt_sim = false;
-        if (s_meas_n) { /* conservé en NVS : survit à un redémarrage */
-            hal_setting_set("conso_ua", (int32_t)(1000 * s_meas_sum / s_meas_n));
-            hal_setting_set("conso_max", (int32_t)(1000 * s_meas_max));
-            hal_setting_set("conso_n", (int32_t)s_meas_n);
-            hal_setting_set("conso_info", (int32_t)(s_meas_ble | (s_meas_charging ? 2 : 0) | (s_meas_screen_ms / 1000) << 2));
+        if (s_meas_n) { /* kept in NVS: survives a reboot */
+            hal_setting_set("pm_ua", (int32_t)(1000 * s_meas_sum / s_meas_n));
+            hal_setting_set("pm_max", (int32_t)(1000 * s_meas_max));
+            hal_setting_set("pm_n", (int32_t)s_meas_n);
+            hal_setting_set("pm_info", (int32_t)(s_meas_ble | (s_meas_charging ? 2 : 0) | (s_meas_screen_ms / 1000) << 2));
         }
         return;
     }
     if (s_meas_last && now - s_meas_last < 1000) return;
-    if (now - s_meas_start < 5000) return; /* laisser le Wi-Fi se couper */
+    if (now - s_meas_start < 5000) return; /* let Wi-Fi switch off */
     uint32_t dt = s_meas_last ? now - s_meas_last : 0;
     s_meas_last = now;
     if (s_screen_on) s_meas_screen_ms += dt;
@@ -401,18 +401,18 @@ void power_measure_print(Print &out)
     if (s_meas_n) {
         avg = s_meas_sum / s_meas_n, max = s_meas_max, n = s_meas_n, screen_s = s_meas_screen_ms / 1000;
         ble = s_meas_ble, charging = s_meas_charging;
-    } else if (!s_meas_ms && hal_setting_get("conso_n", 0)) { /* dernière mesure terminée, relue en NVS */
-        int32_t info = hal_setting_get("conso_info", 0);
-        avg = hal_setting_get("conso_ua", 0) / 1000.0f, max = hal_setting_get("conso_max", 0) / 1000.0f;
-        n = hal_setting_get("conso_n", 0), screen_s = info >> 2, ble = info & 1, charging = info & 2;
+    } else if (!s_meas_ms && hal_setting_get("pm_n", 0)) { /* last completed measurement, read back from NVS */
+        int32_t info = hal_setting_get("pm_info", 0);
+        avg = hal_setting_get("pm_ua", 0) / 1000.0f, max = hal_setting_get("pm_max", 0) / 1000.0f;
+        n = hal_setting_get("pm_n", 0), screen_s = info >> 2, ble = info & 1, charging = info & 2;
     } else {
-        out.println(s_meas_ms ? "conso : mesure en cours" : "conso : aucune mesure (conso <minutes>)");
+        out.println(s_meas_ms ? "power: measurement running" : "power: no measurement (power <minutes>)");
         return;
     }
-    out.printf("conso : %s%lu échantillons, moyenne %.1f mA, pic %.1f mA, écran %lu s, BLE %s%s\n",
-               s_meas_ms ? "(en cours) " : "", (unsigned long)n, avg, max, (unsigned long)screen_s,
-               ble ? "actif" : "coupé", charging ? " — ATTENTION : batterie en charge, mesure faussée" : "");
-    if (avg > 0) out.printf("autonomie estimée : %.1f h (%.0f mAh)\n", BATTERY_MAH / avg, BATTERY_MAH);
+    out.printf("power: %s%lu samples, average %.1f mA, peak %.1f mA, screen %lu s, BLE %s%s\n",
+               s_meas_ms ? "(running) " : "", (unsigned long)n, avg, max, (unsigned long)screen_s,
+               ble ? "on" : "off", charging ? " — WARNING: battery charging, measurement skewed" : "");
+    if (avg > 0) out.printf("estimated battery life: %.1f h (%.0f mAh)\n", BATTERY_MAH / avg, BATTERY_MAH);
 }
 
 void power_loop(void)
@@ -422,13 +422,13 @@ void power_loop(void)
     battlog_tick(s_usb_stable);
     const char *reason = poll_irqs();
     if (reason) screen_on(reason);
-    /* Échéance d'une alarme ou d'un minuteur : l'UI (qui ne tourne pas écran éteint)
-     * doit reprendre la main pour sonner. On interroge le modèle directement : un
-     * minuteur lancé écran éteint (ou juste avant l'extinction) doit aussi réveiller. */
+    /* An alarm or timer is due: the UI (which does not run with the screen off) must take over
+     * to ring. The model is queried directly: a timer started with the screen off (or just
+     * before it went off) must wake the watch too. */
     if (ble_take_wake() && !s_screen_on) screen_on("notification");
     if (!s_screen_on) {
         s_wake_at = model_next_event_time();
-        if (s_wake_at && time(nullptr) >= s_wake_at) screen_on("échéance");
+        if (s_wake_at && time(nullptr) >= s_wake_at) screen_on("due");
     }
 
     if (s_screen_on && lv_disp_get_inactive_time(nullptr) > s_timeout_ms &&
@@ -437,9 +437,9 @@ void power_loop(void)
     }
 
     if (!s_screen_on) {
-        /* Pas de sommeil léger sur USB, Wi-Fi allumé, ni BLE actif : sur cette carte, le BLE
-         * prend son horloge basse consommation sur le quartz principal (pas de 32 kHz), ce
-         * qui interdit le sommeil léger. On reste en « modem sleep » à 80 MHz. */
+        /* No light sleep on USB, with Wi-Fi on, or with BLE active: on this board BLE takes its
+         * low-power clock from the main crystal (no 32 kHz one), which rules out light sleep.
+         * Stay in modem sleep at 80 MHz. */
         if (power_usb_stable() || WiFi.getMode() != WIFI_OFF || ble_active()) {
             set_cpu_mhz(80);
         } else {

@@ -1,7 +1,7 @@
 /*
- * Écran ST7789 240×240 via esp_lcd (SPI + DMA) et pilote d'affichage LVGL.
- * Double tampon partiel en RAM interne DMA : LVGL dessine dans l'un pendant
- * que l'autre part en SPI.
+ * ST7789 240×240 display through esp_lcd (SPI + DMA), and the LVGL display driver.
+ * Two partial buffers in internal DMA RAM: LVGL draws into one while the other is
+ * sent over SPI.
  */
 #include "board.h"
 #include "hal_device.h"
@@ -14,12 +14,12 @@
 #include <esp_lcd_panel_vendor.h>
 
 #ifndef KG_SPI_HZ
-#define KG_SPI_HZ (40 * 1000 * 1000) /* 80 MHz testé en Tranche 0 (cf. DECISIONS) */
+#define KG_SPI_HZ (40 * 1000 * 1000) /* 80 MHz was tried in stage 0 (see DECISIONS) */
 #endif
 
 static constexpr int W = 240, H = 240;
-static constexpr int BUF_LINES = 30; /* 2 × 14,4 Ko de DMA interne : marge pour BLE + Wi-Fi (D44) */
-/* La RAM de l'ST7789 fait 240×320 ; en rotation 180° l'image visible commence à la ligne 80. */
+static constexpr int BUF_LINES = 30; /* 2 × 14.4 KB of internal DMA RAM: headroom for BLE + Wi-Fi (D44) */
+/* The ST7789 RAM is 240×320; rotated 180°, the visible image starts at line 80. */
 static constexpr int GAP_Y = 80;
 
 static esp_lcd_panel_handle_t s_panel;
@@ -29,9 +29,9 @@ static lv_disp_draw_buf_t s_draw_buf;
 
 static uint32_t s_frames, s_fps_t0;
 static uint32_t s_mon_time, s_mon_px, s_mon_n;
-static uint32_t s_full_time, s_full_n, s_full_max; /* images plein écran (transitions) */
+static uint32_t s_full_time, s_full_n, s_full_max; /* full-screen frames (transitions) */
 
-/* Appelé par LVGL après chaque rafraîchissement : durée (rendu + envoi) et surface. */
+/* Called by LVGL after each refresh: duration (render + transfer) and area. */
 static void monitor_cb(lv_disp_drv_t *, uint32_t time, uint32_t px)
 {
     s_mon_time += time;
@@ -102,16 +102,16 @@ void display_init(void)
     panel_cfg.color_space = ESP_LCD_COLOR_SPACE_RGB;
     panel_cfg.bits_per_pixel = 16;
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io, &panel_cfg, &s_panel));
-    /* Pas de broche RST : reset logiciel. Si la dalle était active (ancien firmware, redémarrage
-     * à chaud), la fiche ST7789 exige 120 ms avant SLPOUT ; esp_lcd n'en attend que 20 et la dalle
-     * reste alors en veille (rétroéclairage allumé, image noire). */
+    /* No RST pin: software reset. If the panel was active (previous firmware, warm reboot), the
+     * ST7789 datasheet requires 120 ms before SLPOUT; esp_lcd only waits 20 and the panel then
+     * stays asleep (backlight on, black image). */
     esp_lcd_panel_reset(s_panel);
     vTaskDelay(pdMS_TO_TICKS(150));
     esp_lcd_panel_init(s_panel);
     esp_lcd_panel_io_tx_param(io, 0x11 /* SLPOUT */, nullptr, 0);
     vTaskDelay(pdMS_TO_TICKS(120));
-    esp_lcd_panel_invert_color(s_panel, true);       /* dalle IPS : INVON */
-    esp_lcd_panel_mirror(s_panel, true, true);       /* rotation 180°, comme setRotation(2) */
+    esp_lcd_panel_invert_color(s_panel, true);       /* IPS panel: INVON */
+    esp_lcd_panel_mirror(s_panel, true, true);       /* 180° rotation, like setRotation(2) */
     esp_lcd_panel_set_gap(s_panel, 0, GAP_Y);
     esp_lcd_panel_disp_on_off(s_panel, true);
 
@@ -131,16 +131,16 @@ void display_init(void)
     s_fps_t0 = millis();
 }
 
-/* Veille de la dalle (SLPIN/SLPOUT) : quelques µA au lieu de ~6 mA. */
+/* Panel sleep (SLPIN/SLPOUT): a few µA instead of ~6 mA. */
 void display_sleep(bool sleep)
 {
     esp_lcd_panel_disp_on_off(s_panel, !sleep);
     esp_lcd_panel_io_handle_t io = s_io;
     esp_lcd_panel_io_tx_param(io, sleep ? 0x10 /* SLPIN */ : 0x11 /* SLPOUT */, nullptr, 0);
-    vTaskDelay(pdMS_TO_TICKS(sleep ? 5 : 120)); /* 120 ms exigés après SLPOUT */
+    vTaskDelay(pdMS_TO_TICKS(sleep ? 5 : 120)); /* 120 ms required after SLPOUT */
 }
 
-/* Images complètes envoyées par seconde, moyennées depuis le dernier appel. */
+/* Full frames sent per second, averaged since the previous call. */
 float display_fps(void)
 {
     uint32_t now = millis();
@@ -152,8 +152,8 @@ float display_fps(void)
     return s_fps;
 }
 
-/* Mire de test hors LVGL : trois bandes verticales rouge | vert | bleu pendant 5 s.
- * Sert à valider l'écran lui-même et l'ordre des couleurs (RGB/BGR). */
+/* Test pattern outside LVGL: three vertical red | green | blue bands for 5 s.
+ * Validates the panel itself and the colour order (RGB/BGR). */
 void display_test_pattern(void)
 {
     static const uint16_t colors[3] = {0xF800, 0x07E0, 0x001F};
@@ -161,13 +161,13 @@ void display_test_pattern(void)
     auto *band = static_cast<uint8_t *>(heap_caps_malloc(bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
     if (!band) return;
     for (int c = 0; c < 3; c++) {
-        for (size_t i = 0; i < bytes; i += 2) { /* octets poids fort d'abord, comme sur le bus SPI */
+        for (size_t i = 0; i < bytes; i += 2) { /* most significant byte first, as on the SPI bus */
             band[i] = colors[c] >> 8;
             band[i + 1] = colors[c] & 0xFF;
         }
         for (int y = 0; y < H; y += BUF_LINES) {
             esp_lcd_panel_draw_bitmap(s_panel, c * 80, y, c * 80 + 80, y + BUF_LINES, band);
-            vTaskDelay(pdMS_TO_TICKS(5)); /* le tampon est réutilisé : laisser la DMA finir */
+            vTaskDelay(pdMS_TO_TICKS(5)); /* the buffer is reused: let the DMA finish */
         }
     }
     vTaskDelay(pdMS_TO_TICKS(5000));

@@ -35,7 +35,7 @@ static lv_timer_t *s_timer;
 static int s_last_min = -1, s_last_sec = -1;
 static bool s_egg_done_today;
 
-/* ------------------------------------------------------------- mise en page */
+/* ----------------------------------------------------------------- layout */
 
 static lv_obj_t *stencil(lv_obj_t *parent, const char *txt, lv_color_t color)
 {
@@ -215,7 +215,7 @@ static void long_press_cb(lv_event_t *e)
     discharge();
 }
 
-/* --------------------------------------------------------------- horloge */
+/* ------------------------------------------------------------------ clock */
 
 static void update(lv_timer_t *t)
 {

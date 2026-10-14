@@ -1,4 +1,4 @@
-/* Horloge monotone en ms pour LVGL : millis() sur la montre, SDL_GetTicks() en simulateur. */
+/* Monotonic ms clock for LVGL: millis() on the watch, SDL_GetTicks() in the simulator. */
 #pragma once
 #include <stdint.h>
 #ifdef __cplusplus

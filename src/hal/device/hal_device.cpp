@@ -1,9 +1,8 @@
 /*
- * HAL T-Watch 2020 : inventaire, heure, batterie, rétroéclairage, vibreur.
+ * T-Watch 2020 HAL: inventory, time, battery, backlight, vibration.
  *
- * Règle d'or (DECISIONS.md D6) : on ne touche JAMAIS à DCDC3 (cœur ESP32).
- * Le seul rail écrit ici est LDO2 sur V1 (écran + rétroéclairage), comme la
- * bibliothèque officielle LilyGO.
+ * Golden rule (DECISIONS.md D6): NEVER touch DCDC3 (ESP32 core). The only rail written
+ * here is LDO2 on V1 (display + backlight), as the official LilyGO library does.
  */
 #include "../hal.h"
 #include "board.h"
@@ -37,7 +36,7 @@ static bool s_time_valid;
 
 static uint8_t bin2bcd(int v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
 
-/* Écrit l'heure système dans le PCF8563, en UTC ; efface le bit VL. */
+/* Writes the system time to the PCF8563 in UTC; clears the VL bit. */
 void rtc_from_system(void)
 {
     time_t now = time(nullptr);
@@ -50,7 +49,7 @@ void rtc_from_system(void)
     s_sensors.write(bin2bcd(u.tm_hour));
     s_sensors.write(bin2bcd(u.tm_mday));
     s_sensors.write(bin2bcd(u.tm_wday));
-    s_sensors.write(bin2bcd(u.tm_mon + 1)); /* siècle = 0 → 20xx */
+    s_sensors.write(bin2bcd(u.tm_mon + 1)); /* century = 0 → 20xx */
     s_sensors.write(bin2bcd(u.tm_year % 100));
     s_sensors.endTransmission();
     s_time_valid = true;
@@ -58,7 +57,7 @@ void rtc_from_system(void)
 
 bool hal_time_valid(void) { return s_time_valid; }
 
-/* Lit le PCF8563 (heure stockée en UTC) et règle l'horloge système. */
+/* Reads the PCF8563 (time stored in UTC) and sets the system clock. */
 static void rtc_to_system(void)
 {
     s_sensors.beginTransmission(I2C_PCF8563);
@@ -68,7 +67,7 @@ static void rtc_to_system(void)
     uint8_t r[7];
     for (auto &b : r) b = s_sensors.read();
     s_time_valid = !(r[0] & 0x80);
-    if (!s_time_valid) log_w("RTC : bit VL (horloge non fiable, pile vide ou jamais réglée)");
+    if (!s_time_valid) log_w("RTC: VL bit set (clock unreliable: battery flat or never set)");
     struct tm t = {};
     t.tm_sec = bcd2bin(r[0] & 0x7F);
     t.tm_min = bcd2bin(r[1] & 0x7F);
@@ -107,7 +106,7 @@ void hal_device_init(void)
 #endif
     s_inv.ir_tx = true;
 #if defined(KG_BOARD_V2)
-    s_inv.gps = true;   /* confirmé à l'exécution en Tranche 6 (trames NMEA) */
+    s_inv.gps = true;   /* to be confirmed at run time (NMEA sentences) */
     s_inv.sdcard = true;
 #endif
 #if defined(KG_BOARD_V3)
@@ -116,15 +115,15 @@ void hal_device_init(void)
 
     if (s_inv.pmu && s_pmu.begin(s_sensors, I2C_AXP202, PIN_SEN_SDA, PIN_SEN_SCL)) {
 #if defined(KG_BOARD_V1)
-        /* V1 : LDO2 alimente le ST7789 et le rétroéclairage ; il doit rester allumé. */
+        /* V1: LDO2 powers the ST7789 and the backlight; it must stay on. */
         s_pmu.setLDO2Voltage(3300);
         s_pmu.enableLDO2();
 #endif
         s_pmu.enableBattDetection();
         s_pmu.enableBattVoltageMeasure();
         s_pmu.enableVbusVoltageMeasure();
-        s_pmu.enableAdcChannel(0x40 | 0x04); /* ADC_EN1 : courant batterie (b6) et VBUS (b2) — mesures seulement */
-        s_pmu.enableCoulomb();               /* compteur coulométrique : consommation réelle, sommeil compris */
+        s_pmu.enableAdcChannel(0x40 | 0x04); /* ADC_EN1: battery (b6) and VBUS (b2) current — measurements only */
+        s_pmu.enableCoulomb();               /* coulomb counter: real consumption, sleep included */
         s_pmu.setChargingLedMode(XPOWERS_CHG_LED_OFF);
     } else {
         s_inv.pmu = false;
@@ -194,11 +193,11 @@ uint32_t pmu_read_irq(void)
     return what;
 }
 
-/* Courant de décharge batterie en mA (0 sur USB) : base des estimations d'autonomie. */
+/* Battery discharge current in mA (0 on USB): basis for battery-life estimates. */
 float pmu_discharge_ma(void) { return s_inv.pmu ? s_pmu.getBattDischargeCurrent() : 0; }
 float pmu_vbus_ma(void) { return s_inv.pmu ? s_pmu.getVbusCurrent() : 0; }
 
-/* mAh déchargés depuis la mise sous tension de l'AXP202 (compteur coulométrique). */
+/* mAh discharged since the AXP202 powered up (coulomb counter). */
 float pmu_discharged_mah(void)
 {
     if (!s_inv.pmu) return 0;
@@ -206,7 +205,7 @@ float pmu_discharged_mah(void)
     return rate ? 65536.0f * 0.5f * s_pmu.getBattDischargeCoulomb() / 3600.0f / rate : 0;
 }
 
-/* Réglages en NVS, espace « kg ». Clés ≤ 15 caractères. */
+/* Settings in NVS, namespace "kg". Keys ≤ 15 characters. */
 int32_t hal_setting_get(const char *key, int32_t def)
 {
     Preferences p;
@@ -220,11 +219,11 @@ void hal_setting_set(const char *key, int32_t value)
 {
     Preferences p;
     p.begin("kg", false);
-    if (p.getInt(key, value - 1) != value) p.putInt(key, value); /* évite d'user la flash */
+    if (p.getInt(key, value - 1) != value) p.putInt(key, value); /* avoids wearing the flash */
     p.end();
 }
 
-/* Haut-parleur V1 : l'ampli MAX98357A est alimenté par LDO3 (pas un rail de l'ESP32). */
+/* V1 speaker: the MAX98357A amplifier is powered by LDO3 (not an ESP32 rail). */
 void pmu_audio_power(bool on)
 {
     if (!s_inv.pmu || !s_inv.speaker) return;

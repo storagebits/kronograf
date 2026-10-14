@@ -1,17 +1,17 @@
 /*
- * Notifications iPhone par BLE (ANCS), avec NimBLE (hôte en PSRAM).
+ * iPhone notifications over BLE (ANCS), with NimBLE (host in PSRAM).
  *
- * La montre est un périphérique qui annonce la « sollicitation » du service ANCS : l'iPhone
- * la liste dans Réglages → Bluetooth. À la connexion, la montre demande le chiffrement ;
- * l'iPhone affiche une demande d'appairage et l'utilisateur saisit le code à 6 chiffres
- * affiché sur la montre (pas de « Just Works » : protection MITM). Une fois appairé, l'iPhone
- * se reconnecte seul. La montre devient alors client GATT de l'ANCS de l'iPhone, sur la
- * même connexion : Notification Source (événements) → requête d'attributs sur le Control
- * Point → réponse sur la Data Source.
+ * The watch is a peripheral advertising an ANCS service solicitation. iOS does not list
+ * generic BLE accessories in Settings → Bluetooth, so the first connection is made from a BLE
+ * app (nRF Connect…). On connection the watch requests encryption; the iPhone shows a pairing
+ * prompt and the user types the 6-digit code shown on the watch (no "Just Works": MITM
+ * protection). Once bonded, the iPhone reconnects by itself. The watch then becomes a GATT
+ * client of the iPhone's ANCS over the same connection: Notification Source (events) →
+ * attribute request on the Control Point → response on the Data Source.
  *
- * Fils d'exécution : les rappels NimBLE (tâche hôte, cœur 0) ne font que poser des
- * événements ; une tâche « kg_ancs » fait la découverte et les requêtes (opérations
- * bloquantes). L'UI lit une copie de la liste sous verrou.
+ * Threads: NimBLE callbacks (host task, core 0) only post events; a "kg_ancs" task does the
+ * discovery and the requests (blocking operations). The UI reads a copy of the list under a
+ * lock.
  */
 #include "../hal.h"
 #include "hal_device.h"
@@ -29,7 +29,7 @@ static NimBLEServer *s_server;
 static uint16_t s_conn = BLE_HS_CONN_HANDLE_NONE;
 static TaskHandle_t s_task;
 static EventGroupHandle_t s_events;
-static QueueHandle_t s_uids; /* uid | (flags << 32) : événements à traiter */
+static QueueHandle_t s_uids; /* uid | (flags << 32): events to process */
 
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static kg_notif_t s_list[MAX_NOTIFS];
@@ -38,16 +38,16 @@ static volatile uint32_t s_seq;
 static volatile bool s_wake_req;
 
 static kg_ancs_rx_t s_rx;
-static kg_notif_t s_last_rx; /* réponse décodée par le rappel Data Source */
+static kg_notif_t s_last_rx; /* response decoded by the Data Source callback */
 static NimBLERemoteCharacteristic *s_cp;
 
-/* Diagnostic (console « ble ») : compteurs et dernière étape en échec. */
+/* Diagnostics (console "ble"): counters and the last failed step. */
 static volatile uint32_t d_events, d_requests, d_responses, d_timeouts, d_wfail, d_frames;
 static const char *volatile d_last = "";
 static const char *volatile d_phase = "";
 static volatile uint32_t d_connects, d_secured;
 static volatile int d_reason = -1;
-static volatile uint32_t d_rx_raw; /* notifications reçues au niveau GAP, avant tout routage */
+static volatile uint32_t d_rx_raw; /* notifications received at GAP level, before any routing */
 static volatile uint16_t d_rx_handle, d_ns_handle, d_ds_handle;
 static ble_gap_event_listener s_listener;
 
@@ -60,7 +60,7 @@ static int gap_listener(struct ble_gap_event *ev, void *)
     return 0;
 }
 
-/* -------------------------------------------------------------- liste */
+/* --------------------------------------------------------------- list */
 
 static void list_remove(uint32_t uid)
 {
@@ -74,7 +74,7 @@ static void list_remove(uint32_t uid)
     portEXIT_CRITICAL(&s_mux);
 }
 
-/* En tête de liste (la plus récente d'abord) ; une notification modifiée remplace l'ancienne. */
+/* At the head of the list (most recent first); a modified notification replaces the old one. */
 static void list_put(const kg_notif_t &n)
 {
     list_remove(n.uid);
@@ -86,14 +86,14 @@ static void list_put(const kg_notif_t &n)
     portEXIT_CRITICAL(&s_mux);
 }
 
-/* ---------------------------------------------------------- rappels BLE */
+/* ---------------------------------------------------------- BLE callbacks */
 
 static void on_notif_source(NimBLERemoteCharacteristic *, uint8_t *data, size_t len, bool)
 {
     kg_ancs_event_t ev;
     d_events++;
     if (!kg_ancs_parse_event(data, len, &ev)) {
-        d_last = "événement illisible";
+        d_last = "unreadable event";
         return;
     }
     if (ev.event == KG_ANCS_REMOVED) {
@@ -101,7 +101,7 @@ static void on_notif_source(NimBLERemoteCharacteristic *, uint8_t *data, size_t 
         return;
     }
     uint64_t item = ev.uid | (uint64_t)ev.flags << 32 | (uint64_t)ev.category << 40 | (uint64_t)ev.event << 48;
-    if (xQueueSend(s_uids, &item, 0) != pdTRUE) { /* file pleine (reconnexion) : on garde les plus récentes */
+    if (xQueueSend(s_uids, &item, 0) != pdTRUE) { /* queue full (reconnection): keep the most recent */
         uint64_t drop;
         xQueueReceive(s_uids, &drop, 0);
         xQueueSend(s_uids, &item, 0);
@@ -120,8 +120,8 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_conn = info.getConnHandle();
         s_state = KG_BLE_CONNECTED;
         d_connects++;
-        Serial.printf("event ble connexion %s\n", info.getIdAddress().toString().c_str());
-        /* Déjà appairé : le chiffrement reprend avec la clé mémorisée. Sinon : appairage. */
+        Serial.printf("event ble connected %s\n", info.getIdAddress().toString().c_str());
+        /* Already bonded: encryption resumes with the stored key. Otherwise: pairing. */
         NimBLEDevice::startSecurity(s_conn);
     }
 
@@ -130,80 +130,80 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_conn = BLE_HS_CONN_HANDLE_NONE;
         s_cp = nullptr;
         s_state = s_enabled ? KG_BLE_WAITING : KG_BLE_OFF;
-        xEventGroupClearBits(s_events, EV_SECURED); /* pas de chiffrement périmé pour la prochaine liaison */
+        xEventGroupClearBits(s_events, EV_SECURED); /* no stale encryption flag for the next link */
         xEventGroupSetBits(s_events, EV_DISCONNECTED);
         d_reason = reason;
-        Serial.printf("event ble déconnexion %d\n", reason);
+        Serial.printf("event ble disconnected %d\n", reason);
     }
 
     uint32_t onPassKeyDisplay() override
     {
         s_passkey = 100000 + esp_random() % 900000;
         s_state = KG_BLE_PAIRING;
-        s_wake_req = true; /* le code doit être visible : on allume l'écran */
-        Serial.println("event ble code d'appairage affiché");
+        s_wake_req = true; /* the code must be visible: turn the screen on */
+        Serial.println("event ble pairing code shown");
         return s_passkey;
     }
 
     void onAuthenticationComplete(NimBLEConnInfo &info) override
     {
         if (!info.isEncrypted()) {
-            Serial.println("event ble appairage refusé");
+            Serial.println("event ble pairing rejected");
             s_state = KG_BLE_CONNECTED;
             NimBLEDevice::getServer()->disconnect(info.getConnHandle());
             return;
         }
         d_secured++;
-        if (s_state == KG_BLE_READY) return; /* l'iPhone renouvelle le chiffrement d'une liaison prête */
+        if (s_state == KG_BLE_READY) return; /* the iPhone is refreshing encryption on a ready link */
         s_state = KG_BLE_CONNECTED;
         s_passkey = 0;
         xEventGroupSetBits(s_events, EV_SECURED);
     }
 };
 
-/* --------------------------------------------------------------- tâche ANCS */
+/* --------------------------------------------------------------- ANCS task */
 
 static bool ancs_attach(void)
 {
     NimBLEConnInfo info = s_server->getPeerInfoByHandle(s_conn);
     NimBLEClient *client = s_server->getClient(info);
-    d_phase = "découverte";
+    d_phase = "discovery";
     if (!client) {
-        d_last = "pas de client GATT";
+        d_last = "no GATT client";
         return false;
     }
     NimBLERemoteService *svc = client->getService(KG_ANCS_SERVICE);
     if (!svc) {
-        d_last = "service ANCS introuvable";
-        Serial.println("event ble pas d'ANCS (pas un iPhone ?)");
+        d_last = "ANCS service not found";
+        Serial.println("event ble no ANCS (not an iPhone?)");
         return false;
     }
     NimBLERemoteCharacteristic *ns = svc->getCharacteristic(KG_ANCS_NOTIF_SOURCE);
     NimBLERemoteCharacteristic *ds = svc->getCharacteristic(KG_ANCS_DATA_SOURCE);
     s_cp = svc->getCharacteristic(KG_ANCS_CONTROL_POINT);
     if (!ns || !ds || !s_cp) {
-        d_last = "caractéristiques ANCS absentes";
+        d_last = "ANCS characteristics missing";
         return false;
     }
-    /* Data Source d'abord : les réponses ne doivent pas arriver avant l'abonnement. */
-    d_phase = "abonnement";
+    /* Data Source first: responses must not arrive before the subscription. */
+    d_phase = "subscribing";
     d_ns_handle = ns->getHandle();
     d_ds_handle = ds->getHandle();
     if (!ds->subscribe(true, on_data_source)) {
-        d_last = "abonnement Data Source refusé";
+        d_last = "Data Source subscription refused";
         return false;
     }
     if (!ns->subscribe(true, on_notif_source)) {
-        d_last = "abonnement Notification Source refusé";
+        d_last = "Notification Source subscription refused";
         return false;
     }
-    /* Intervalle de connexion économe, dans les bornes acceptées par iOS :
-     * 300–330 ms, latence 4 (≤ 2 s entre échanges), délai de supervision 6 s. */
+    /* Frugal connection interval, within the bounds iOS accepts:
+     * 300–330 ms, latency 4 (≤ 2 s between exchanges), 6 s supervision timeout. */
     client->updateConnParams(240, 264, 4, 600);
     return true;
 }
 
-static constexpr uint8_t EVENT_DISMISS = 0xFE; /* pseudo-événement : effacer sur l'iPhone */
+static constexpr uint8_t EVENT_DISMISS = 0xFE; /* pseudo-event: clear on the iPhone */
 
 static void fetch(uint64_t item)
 {
@@ -220,22 +220,22 @@ static void fetch(uint64_t item)
     kg_ancs_rx_reset(&s_rx);
     xEventGroupClearBits(s_events, EV_RESPONSE);
     d_requests++;
-    d_phase = "requête";
+    d_phase = "request";
     if (!s_cp || !s_cp->writeValue(req, n, true)) {
         d_wfail++;
-        d_last = "requête Control Point refusée";
+        d_last = "Control Point request refused";
         return;
     }
-    d_phase = "attente réponse";
+    d_phase = "awaiting response";
     EventBits_t bits = xEventGroupWaitBits(s_events, EV_RESPONSE | EV_DISCONNECTED, pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
-    d_phase = "prêt";
+    d_phase = "ready";
     if (!(bits & EV_RESPONSE)) {
         d_timeouts++;
-        d_last = s_rx.len ? "réponse incomplète" : "pas de réponse Data Source";
+        d_last = s_rx.len ? "incomplete response" : "no Data Source response";
         return;
     }
     if (s_last_rx.uid != uid) {
-        d_last = "réponse d'une autre notification";
+        d_last = "response for another notification";
         return;
     }
     d_responses++;
@@ -247,20 +247,20 @@ static void fetch(uint64_t item)
         s_seq++;
         s_wake_req = true;
     }
-    Serial.printf("event notification cat=%u %s%s\n", category, note.app, alert ? " (alerte)" : "");
+    Serial.printf("event notification cat=%u %s%s\n", category, note.app, alert ? " (alert)" : "");
 }
 
 static void ancs_task(void *)
 {
     for (;;) {
-        d_phase = "attente chiffrement";
+        d_phase = "awaiting encryption";
         EventBits_t bits = xEventGroupWaitBits(s_events, EV_SECURED, pdTRUE, pdFALSE, pdMS_TO_TICKS(15000));
         if (!(bits & EV_SECURED)) {
-            /* Connecté depuis 15 s sans chiffrement : la reprise de liaison a échoué en silence
-             * (iPhone revenu à portée). On coupe : l'iPhone se reconnecte proprement. */
+            /* Connected for 15 s without encryption: resuming the link failed silently (iPhone back
+             * in range). Drop it: the iPhone reconnects cleanly. */
             uint16_t conn = s_conn;
             if (s_state == KG_BLE_CONNECTED && conn != BLE_HS_CONN_HANDLE_NONE && s_server) {
-                d_last = "chiffrement jamais établi, reconnexion";
+                d_last = "encryption never established, reconnecting";
                 s_server->disconnect(conn);
             }
             continue;
@@ -268,13 +268,13 @@ static void ancs_task(void *)
         xEventGroupClearBits(s_events, EV_DISCONNECTED);
         xQueueReset(s_uids);
         if (!ancs_attach()) {
-            uint16_t conn = s_conn; /* échec de découverte : on relance la connexion */
+            uint16_t conn = s_conn; /* discovery failed: restart the connection */
             if (conn != BLE_HS_CONN_HANDLE_NONE && s_server) s_server->disconnect(conn);
             continue;
         }
-        d_phase = "prêt";
+        d_phase = "ready";
         s_state = KG_BLE_READY;
-        Serial.println("event ble ANCS prêt");
+        Serial.println("event ble ANCS ready");
         while (!(xEventGroupGetBits(s_events) & EV_DISCONNECTED)) {
             uint64_t item;
             if (xQueueReceive(s_uids, &item, pdMS_TO_TICKS(500)) == pdTRUE) fetch(item);
@@ -282,13 +282,13 @@ static void ancs_task(void *)
     }
 }
 
-/* ---------------------------------------------------------------- pilotage */
+/* ---------------------------------------------------------------- control */
 
 static void ble_up(void)
 {
     if (s_inited) return;
     NimBLEDevice::init("Kronograf");
-    NimBLEDevice::setSecurityAuth(true, true, true); /* appairage, MITM, connexion sécurisée */
+    NimBLEDevice::setSecurityAuth(true, true, true); /* bonding, MITM, secure connections */
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     s_server = NimBLEDevice::createServer();
     s_server->setCallbacks(new ServerCallbacks());
@@ -299,9 +299,9 @@ static void ble_up(void)
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     NimBLEAdvertisementData data;
     data.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
-    data.setAppearance(0x00C0); /* montre */
-    /* Sollicitation du service ANCS (type 0x15, UUID 128 bits petit-boutiste) : c'est ce qui
-     * fait apparaître la montre dans Réglages → Bluetooth de l'iPhone. */
+    data.setAppearance(0x00C0); /* watch */
+    /* ANCS service solicitation (AD type 0x15, little-endian 128-bit UUID): tells the iPhone
+     * that the watch wants to consume its notifications. */
     uint8_t sol[18] = {17, 0x15};
     NimBLEUUID uuid(KG_ANCS_SERVICE);
     memcpy(sol + 2, uuid.getValue(), 16);
@@ -310,7 +310,7 @@ static void ble_up(void)
     NimBLEAdvertisementData scan;
     scan.setName("Kronograf");
     adv->setScanResponseData(scan);
-    adv->setMinInterval(400); /* 250–500 ms : l'iPhone retrouve vite la montre, sans gaspiller */
+    adv->setMinInterval(400); /* 250–500 ms: the iPhone finds the watch quickly without wasting power */
     adv->setMaxInterval(800);
     adv->start();
     s_inited = true;
@@ -355,7 +355,7 @@ bool hal_ble_enabled(void) { return s_enabled; }
 
 void hal_ble_enable(bool on)
 {
-    if (!s_events) return; /* mode sans échec : BLE jamais initialisé */
+    if (!s_events) return; /* safe mode: BLE never initialised */
     s_enabled = on;
     hal_setting_set("ble", on);
     if (on) ble_up();
@@ -387,19 +387,19 @@ uint32_t hal_notif_seq(void) { return s_seq; }
 
 void ble_diag(Print &out)
 {
-    out.printf("liaison : %lu connexions, %lu chiffrements, dernière déconnexion 0x%x, tâche : %s\n",
+    out.printf("link: %lu connections, %lu encryptions, last disconnect 0x%x, task: %s\n",
                (unsigned long)d_connects, (unsigned long)d_secured, d_reason, d_phase);
-    out.printf("gap : %lu notifications reçues (dernière poignée %u ; NS %u, DS %u)\n", (unsigned long)d_rx_raw,
+    out.printf("gap: %lu notifications received (last handle %u; NS %u, DS %u)\n", (unsigned long)d_rx_raw,
                d_rx_handle, d_ns_handle, d_ds_handle);
-    out.printf("ancs : %lu événements, %lu requêtes, %lu réponses (%lu trames), %lu sans réponse, %lu écritures refusées%s%s\n",
+    out.printf("ancs: %lu events, %lu requests, %lu responses (%lu frames), %lu unanswered, %lu writes refused%s%s\n",
                (unsigned long)d_events, (unsigned long)d_requests, (unsigned long)d_responses, (unsigned long)d_frames,
-               (unsigned long)d_timeouts, (unsigned long)d_wfail, *d_last ? " ; dernier échec : " : "", d_last);
+               (unsigned long)d_timeouts, (unsigned long)d_wfail, *d_last ? "; last failure: " : "", d_last);
 }
 
 void hal_notif_dismiss(uint32_t uid)
 {
     list_remove(uid);
     if (s_state != KG_BLE_READY) return;
-    uint64_t item = uid | (uint64_t)EVENT_DISMISS << 48; /* écriture avec réponse : faite par la tâche */
+    uint64_t item = uid | (uint64_t)EVENT_DISMISS << 48; /* write with response: done by the task */
     xQueueSendToFront(s_uids, &item, 0);
 }

@@ -1,8 +1,8 @@
 /*
- * Réseau à la demande : une tâche de fond basse priorité exécute les « travaux »
- * demandés (synchro NTP, météo, bus), Wi-Fi allumé le temps des requêtes puis coupé
- * (jamais en permanence). Sans identifiants Wi-Fi, tout se désactive et l'UI affiche
- * un indice lisible ; sans clé STM, le bus est simplement absent.
+ * On-demand networking: a low-priority background task runs the requested "jobs" (NTP
+ * sync, weather, buses), with Wi-Fi on only for the requests and then off (never
+ * permanently). Without Wi-Fi credentials everything is disabled and the UI shows a readable
+ * hint; without an STM key, buses are simply absent.
  */
 #include "../hal.h"
 #include "certs.h"
@@ -24,7 +24,7 @@
 
 static volatile time_t s_last_sync;
 
-/* Identifiants : ceux saisis sur la montre (NVS « kgnet ») priment sur secrets.h. */
+/* Credentials: those entered on the watch (NVS "kgnet") take precedence over secrets.h. */
 static char s_ssid[33], s_pass[65];
 static char s_stops[40];
 
@@ -45,9 +45,9 @@ static void load_credentials(void)
 }
 
 static bool have_wifi(void) { return s_ssid[0] != 0; }
-static const char *volatile s_status = "inactif";
+static const char *volatile s_status = "Idle";
 
-/* ------------------------------------------------------------------ travaux */
+/* ------------------------------------------------------------------- jobs */
 
 enum : uint32_t { JOB_NTP = 1, JOB_WX = 2, JOB_BUS = 4 };
 static uint32_t s_jobs;
@@ -59,20 +59,20 @@ static bool s_scanning;
 static constexpr uint32_t WIFI_TIMEOUT_MS = 15000;
 static constexpr uint32_t NTP_TIMEOUT_MS = 10000;
 
-/* Données partagées avec l'UI (cœur 1) : copiées sous verrou. */
+/* Data shared with the UI (core 1): copied under a lock. */
 static kg_weather_t s_wx;
 static kg_bus_t s_bus;
-static const char *volatile s_wx_status = "Pas encore de relevé";
-static const char *volatile s_bus_status = "Pas encore de relevé";
+static const char *volatile s_wx_status = "No reading yet";
+static const char *volatile s_bus_status = "No data yet";
 static volatile bool s_wx_busy, s_bus_busy;
-static volatile int s_bus_err; /* dernier code d'erreur HTTP du bus (diagnostic console) */
+static volatile int s_bus_err; /* last HTTP error code for buses (console diagnostics) */
 
 static void do_ntp(void)
 {
-    s_status = "synchro NTP";
+    s_status = "NTP sync";
     configTzTime(KG_TZ, "pool.ntp.org", "time.nrc.ca");
     uint32_t t0 = millis();
-    /* sntp_get_sync_status() remet l'état à zéro quand on le lit : une seule lecture par tour. */
+    /* sntp_get_sync_status() resets the state when read: one read per iteration. */
     bool synced = false;
     while (!synced && millis() - t0 < NTP_TIMEOUT_MS) {
         synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
@@ -81,10 +81,10 @@ static void do_ntp(void)
     if (synced) {
         rtc_from_system();
         s_last_sync = time(nullptr);
-        s_status = "synchronisé";
-        log_i("NTP : heure réglée en %lu ms", (unsigned long)(millis() - t0));
+        s_status = "Synced";
+        log_i("NTP: time set in %lu ms", (unsigned long)(millis() - t0));
     } else {
-        s_status = "NTP sans réponse";
+        s_status = "No NTP response";
     }
     sntp_stop();
 }
@@ -103,24 +103,24 @@ static void do_weather(void)
             portENTER_CRITICAL(&s_mux);
             s_wx = wx;
             portEXIT_CRITICAL(&s_mux);
-            Preferences p; /* cache : l'app affiche le dernier relevé dès le démarrage */
+            Preferences p; /* cache: the app shows the last reading right from boot */
             p.begin("kgwx", false);
             p.putBytes("wx", &wx, sizeof wx);
             p.end();
             s_wx_status = nullptr;
-            Serial.printf("event météo %.1f° code %u\n", wx.temp, wx.code);
+            Serial.printf("event weather %.1f° code %u\n", wx.temp, wx.code);
         } else {
-            s_wx_status = "Réponse météo illisible";
+            s_wx_status = "Unreadable weather response";
         }
     } else {
-        s_wx_status = code < 0 ? "Open-Meteo injoignable" : "Open-Meteo : erreur du service";
-        Serial.printf("event météo erreur %d\n", code);
+        s_wx_status = code < 0 ? "Open-Meteo unreachable" : "Open-Meteo service error";
+        Serial.printf("event weather error %d\n", code);
     }
     http.end();
 }
 
-/* Le flux STM (~1 Mo, découpé « chunked ») est passé à l'analyseur au fil de l'eau : un
- * Stream dont write() alimente kg_gtfs_feed(). HTTPClient::writeToStream gère le découpage. */
+/* The STM feed (~1 MB, chunked transfer) is handed to the parser as it arrives: a Stream
+ * whose write() feeds kg_gtfs_feed(). HTTPClient::writeToStream handles the chunking. */
 class GtfsSink : public Stream {
   public:
     explicit GtfsSink(kg_gtfs_t *g) : m_g(g) {}
@@ -142,18 +142,18 @@ class GtfsSink : public Stream {
     size_t m_total = 0;
 };
 
-static constexpr size_t GTFS_BUF = 16384; /* plus grande entité observée : ~3 Ko */
+static constexpr size_t GTFS_BUF = 16384; /* largest entity seen: ~3 KB */
 
 static void do_bus(void)
 {
     if (!s_stops[0]) {
-        s_bus_status = "Aucun arrêt choisi";
+        s_bus_status = "No stop selected";
         return;
     }
     uint8_t *buf = (uint8_t *)hal_alloc_large(GTFS_BUF);
     kg_gtfs_t *g = (kg_gtfs_t *)hal_alloc_large(sizeof(kg_gtfs_t));
     if (!buf || !g) {
-        s_bus_status = "Mémoire insuffisante";
+        s_bus_status = "Out of memory";
         free(buf);
         free(g);
         return;
@@ -181,16 +181,16 @@ static void do_bus(void)
             portEXIT_CRITICAL(&s_mux);
             s_bus_status = nullptr;
         } else {
-            s_bus_status = "Flux STM incomplet";
+            s_bus_status = "Incomplete STM feed";
         }
-        Serial.printf("event bus %u o, %lu entités, %u passages, %lu ms, tas min %lu\n", (unsigned)sink.total(),
+        Serial.printf("event bus %u B, %lu entities, %u departures, %lu ms, min heap %lu\n", (unsigned)sink.total(),
                       (unsigned long)g->entities, r->n, (unsigned long)(millis() - t0),
                       (unsigned long)ESP.getMinFreeHeap());
     } else {
-        s_bus_status = code == 401 || code == 403 ? "Clé STM refusée"
-                       : code < 0                 ? "STM injoignable"
-                                                  : "STM : erreur du service";
-        Serial.printf("event bus erreur %d (%s)\n", code, HTTPClient::errorToString(code).c_str());
+        s_bus_status = code == 401 || code == 403 ? "STM key rejected"
+                       : code < 0                 ? "STM unreachable"
+                                                  : "STM service error";
+        Serial.printf("event bus error %d (%s)\n", code, HTTPClient::errorToString(code).c_str());
         s_bus_err = code;
     }
     (void)heap_min;
@@ -201,9 +201,9 @@ static void do_bus(void)
 
 static bool wifi_up(void)
 {
-    if (WiFi.status() == WL_CONNECTED) return true; /* connexion du mode atelier */
-    s_status = "connexion Wi-Fi";
-    WiFi.persistent(false); /* ne pas écrire les identifiants en NVS */
+    if (WiFi.status() == WL_CONNECTED) return true; /* workshop-mode connection */
+    s_status = "Connecting to Wi-Fi";
+    WiFi.persistent(false); /* do not write the credentials to NVS */
     WiFi.setHostname("kronograf");
     WiFi.mode(WIFI_STA);
     WiFi.begin(s_ssid, s_pass);
@@ -226,22 +226,22 @@ static void net_task(void *)
         if (!tried) {
             up = wifi_up();
             tried = true;
-            if (!up) s_status = "Wi-Fi injoignable";
+            if (!up) s_status = "Wi-Fi unreachable";
         }
         if (!up) {
-            if (jobs & JOB_WX) s_wx_status = "Wi-Fi injoignable";
-            if (jobs & JOB_BUS) s_bus_status = "Wi-Fi injoignable";
+            if (jobs & JOB_WX) s_wx_status = "Wi-Fi unreachable";
+            if (jobs & JOB_BUS) s_bus_status = "Wi-Fi unreachable";
         } else {
             if (jobs & JOB_NTP) do_ntp();
             if (jobs & JOB_WX) do_weather();
             if (jobs & JOB_BUS) do_bus();
-            if (s_status != nullptr && !strncmp(s_status, "connexion", 9)) s_status = "connecté";
+            if (s_status != nullptr && !strncmp(s_status, "Connecting", 10)) s_status = "Connected";
         }
         if (jobs & JOB_WX) s_wx_busy = false;
         if (jobs & JOB_BUS) s_bus_busy = false;
     }
-    /* Sur USB, le mode atelier reprend la connexion telle quelle : pas de coupure qui
-     * ferait sauter une console TCP fraîchement ouverte. */
+    /* On USB, workshop mode takes the connection over as is: no disconnect that would drop a
+     * freshly opened TCP console. */
     if (!(KG_WORKSHOP && power_usb_stable() && WiFi.status() == WL_CONNECTED)) {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
@@ -259,18 +259,18 @@ static void net_request(uint32_t jobs)
     if (start) s_task_running = true;
     portEXIT_CRITICAL(&s_mux);
     if (!start) return;
-    while (s_task) vTaskDelay(1); /* la tâche précédente finit de couper le Wi-Fi */
-    /* Cœur 0 (celui du Wi-Fi), priorité basse : l'UI sur le cœur 1 reste fluide. La pile
-     * doit tenir la poignée de main TLS (mbedTLS). */
+    while (s_task) vTaskDelay(1); /* the previous task is still switching Wi-Fi off */
+    /* Core 0 (the Wi-Fi core), low priority: the UI on core 1 stays smooth. The stack must
+     * hold the TLS handshake (mbedTLS). */
     xTaskCreatePinnedToCore(net_task, "kg_net", 8192, nullptr, 1, &s_task, 0);
 }
 
-/* Tampons TLS (≈ 2 × 16 Ko par connexion) en PSRAM : en mémoire interne, Wi-Fi + BLE +
- * TLS ne laissaient que 6 Ko libres pendant le téléchargement STM. Le chiffrement matériel
- * de l'ESP32 n'utilise pas de DMA : la PSRAM convient. Repli en interne si la PSRAM manque. */
+/* TLS buffers (≈ 2 × 16 KB per connection) in PSRAM: in internal RAM, Wi-Fi + BLE + TLS
+ * left only 6 KB free during the STM download. The ESP32 crypto hardware does not use DMA,
+ * so PSRAM is fine. Falls back to internal RAM if PSRAM runs out. */
 static void *tls_calloc(size_t n, size_t size)
 {
-    if (n * size >= 4096) { /* gros tampons d'enregistrement seulement */
+    if (n * size >= 4096) { /* large record buffers only */
         void *p = heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (p) return p;
     }
@@ -282,9 +282,9 @@ void net_start_time_sync(void)
     mbedtls_platform_set_calloc_free(tls_calloc, free);
     load_credentials();
     if (!have_wifi()) {
-        s_status = "pas de Wi-Fi configuré";
-        s_wx_status = "Wi-Fi non configuré";
-        s_bus_status = "Wi-Fi non configuré";
+        s_status = "No Wi-Fi configured";
+        s_wx_status = "Wi-Fi not configured";
+        s_bus_status = "Wi-Fi not configured";
         return;
     }
     Preferences p;
@@ -296,7 +296,7 @@ void net_start_time_sync(void)
     }
     p.end();
     s_wx_busy = true;
-    net_request(JOB_NTP | JOB_WX); /* une seule connexion au démarrage pour l'heure et la météo */
+    net_request(JOB_NTP | JOB_WX); /* a single connection at boot for both time and weather */
 }
 
 const char *net_status(void) { return s_status; }
@@ -306,10 +306,10 @@ time_t hal_last_sync(void) { return s_last_sync; }
 const char *hal_time_hint(void)
 {
     if (hal_time_valid()) return nullptr;
-    return have_wifi() ? "Synchro de l'heure…" : "Configurer le Wi-Fi (Réglages)";
+    return have_wifi() ? "Syncing the time…" : "Set up Wi-Fi (Settings)";
 }
 
-/* -------------------------------------------------------------- météo, bus */
+/* ------------------------------------------------------------ weather, bus */
 
 bool hal_weather(kg_weather_t *out)
 {
@@ -326,7 +326,7 @@ void hal_weather_refresh(uint32_t max_age_s)
     if (s_wx.valid && now - s_wx.fetched < (time_t)max_age_s) return;
     s_wx_busy = true;
     net_request(JOB_WX);
-    if (!s_task_running) s_wx_busy = false; /* refusé : pas de Wi-Fi ou scan en cours */
+    if (!s_task_running) s_wx_busy = false; /* refused: no Wi-Fi, or a scan is running */
 }
 
 const char *hal_weather_status(void) { return s_wx_status; }
@@ -362,7 +362,7 @@ void hal_bus_refresh(uint32_t max_age_s)
 {
     if (!hal_bus_available() || s_bus_busy) return;
     if (!s_stops[0]) {
-        s_bus_status = "Aucun arrêt choisi";
+        s_bus_status = "No stop selected";
         return;
     }
     if (s_bus.valid && time(nullptr) - s_bus.fetched < (time_t)max_age_s) return;
@@ -375,14 +375,14 @@ int net_bus_last_error(void) { return s_bus_err; }
 
 const char *hal_bus_status(void)
 {
-    if (!hal_bus_available()) return "Clé STM absente (secrets.h)";
-    return s_bus_busy ? "mise à jour…" : s_bus_status;
+    if (!hal_bus_available()) return "No STM API key (secrets.h)";
+    return s_bus_busy ? "Updating…" : s_bus_status;
 }
 
-/* ------------------------------------------------------------ mode atelier
- * Montre sur USB (donc sur secteur) et Wi-Fi configuré : Wi-Fi maintenu, OTA et
- * console TCP actifs. Débranchée : tout est coupé, l'autonomie n'est pas touchée.
- * Désactivable à la compilation (-D KG_WORKSHOP=0). */
+/* ---------------------------------------------------------- workshop mode
+ * Watch on USB (so on mains power) with Wi-Fi configured: Wi-Fi stays on, OTA and the TCP
+ * console are active. Unplugged: everything is off and battery life is untouched.
+ * Can be disabled at build time (-D KG_WORKSHOP=0). */
 #ifndef KG_OTA_PASS
 #define KG_OTA_PASS ""
 #endif
@@ -393,15 +393,15 @@ static void workshop_start(void)
 {
     s_workshop = true;
     s_ota_ready = false;
-    if (WiFi.status() == WL_CONNECTED) { /* connexion héritée de la synchro NTP */
-        s_status = "atelier : connexion";
+    if (WiFi.status() == WL_CONNECTED) { /* connection inherited from the NTP sync */
+        s_status = "Workshop: connecting";
         return;
     }
     WiFi.persistent(false);
     WiFi.setHostname("kronograf");
     WiFi.mode(WIFI_STA);
     WiFi.begin(s_ssid, s_pass);
-    s_status = "atelier : connexion";
+    s_status = "Workshop: connecting";
 }
 
 static void workshop_stop(void)
@@ -412,12 +412,12 @@ static void workshop_stop(void)
     console_tcp_enable(false);
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
-    s_status = "inactif";
+    s_status = "Idle";
 }
 
 void net_workshop_loop(void)
 {
-    if (!KG_WORKSHOP || !have_wifi() || s_task || s_scanning) return; /* travaux réseau et scan ont la priorité */
+    if (!KG_WORKSHOP || !have_wifi() || s_task || s_scanning) return; /* network jobs and scans come first */
     bool usb = power_usb_stable();
     if (usb && !s_workshop) {
         guard_crumb(KG_CRUMB_WORKSHOP_ON);
@@ -433,22 +433,22 @@ void net_workshop_loop(void)
         if (sizeof(KG_OTA_PASS) > 1) ArduinoOTA.setPassword(KG_OTA_PASS);
         ArduinoOTA.onStart([] { Serial.println("event ota start"); });
         ArduinoOTA.onEnd([] { Serial.println("event ota end"); });
-        /* Le transfert OTA tourne dans loop() : nourrir le chien de garde de la boucle. */
+        /* The OTA transfer runs inside loop(): feed the loop watchdog. */
         ArduinoOTA.onProgress([](unsigned int, unsigned int) {
             esp_task_wdt_reset();
-            guard_feed(); /* le transfert peut dépasser les 90 s du RWDT */
+            guard_feed(); /* the transfer may outlast the RWDT's 90 s */
         });
         ArduinoOTA.onError([](ota_error_t e) { Serial.printf("event ota error %d\n", e); });
         ArduinoOTA.begin();
         console_tcp_enable(true);
         s_ota_ready = true;
-        s_status = "atelier : OTA + console TCP";
-        Serial.printf("atelier : kronograf.local / %s, console TCP 2323\n", WiFi.localIP().toString().c_str());
+        s_status = "Workshop: OTA + TCP console";
+        Serial.printf("workshop: kronograf.local / %s, TCP console 2323\n", WiFi.localIP().toString().c_str());
     }
     if (s_ota_ready) ArduinoOTA.handle();
 }
 
-/* ------------------------------------------------------------- saisie Wi-Fi */
+/* ------------------------------------------------------------ Wi-Fi setup */
 
 void hal_wifi_scan_start(void)
 {
@@ -456,7 +456,7 @@ void hal_wifi_scan_start(void)
     s_scanning = true;
     if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
     WiFi.scanDelete();
-    WiFi.scanNetworks(true /* asynchrone */, false);
+    WiFi.scanNetworks(true /* asynchronous */, false);
 }
 
 int hal_wifi_scan_count(void)
@@ -465,7 +465,7 @@ int hal_wifi_scan_count(void)
     if (n == WIFI_SCAN_RUNNING) return -1;
     if (s_scanning) {
         s_scanning = false;
-        if (!s_workshop) WiFi.mode(WIFI_OFF); /* pas de Wi-Fi laissé allumé après un scan */
+        if (!s_workshop) WiFi.mode(WIFI_OFF); /* never leave Wi-Fi on after a scan */
     }
     return n < 0 ? 0 : n;
 }
@@ -486,7 +486,7 @@ void hal_wifi_set_credentials(const char *ssid, const char *pass)
     p.putString("pass", pass);
     p.end();
     if (s_workshop) workshop_stop();
-    net_start_time_sync(); /* recharge les identifiants et tente une synchro */
+    net_start_time_sync(); /* reloads the credentials and tries a sync */
 }
 
 const char *hal_wifi_ssid(void) { return s_ssid; }
