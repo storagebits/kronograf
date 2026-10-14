@@ -56,10 +56,14 @@ static const stroke_t DEMO[] = {
     {5200, 6400, 120, 120, 120, 120},    /* long press on PRESENT TIME: discharge */
     {8600, 8820, 205, 120, 35, 120},     /* → night */
     {10400, 10620, 120, 205, 120, 35},   /* swipe up: launcher */
-    {12000, 12080, 65, 195, 65, 195},    /* tap Weather */
+    {12000, 12080, 120, 113, 120, 113},  /* tap Weather */
     {18600, 18680, 175, 215, 175, 215},  /* OK on the notification card */
+    {20000, 20220, 35, 120, 205, 120},   /* swipe right: back to the launcher */
+    {21400, 21700, 215, 130, 25, 130},   /* next launcher page */
+    {23000, 23080, 42, 37, 42, 37},      /* tap Network */
+    {24800, 24880, 120, 70, 120, 70},    /* tap Wi-Fi analyzer */
 };
-static const uint32_t DEMO_END_MS = 20500;
+static const uint32_t DEMO_END_MS = 29000;
 #define RECORD_FPS 20
 
 static void demo_pointer(uint32_t t)

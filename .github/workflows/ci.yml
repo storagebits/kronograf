@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and run the host tests
         run: |
-          cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -o kg_test
+          cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -lm -o kg_test
           ./kg_test tests/data/openmeteo-montreal.json
 
   simulator:
@@ -39,8 +39,9 @@ jobs:
           for face in 0 1 2; do
             KG_TIME=10:09:30 KG_FACE=$face sim/build/kronograf_sim --shot shots/face$face.png
           done
-          for app in launcher chrono timer alarms steps weather settings notifs; do
-            KG_TIME=10:09:30 KG_APP=$app sim/build/kronograf_sim --shot shots/$app.png
+          for app in launcher chrono timer alarms steps weather settings notifs world sky level torch remote system \
+            net net:wifi net:link net:ping net:trace net:dns net:ports net:lan net:speed net:ble net:cidr; do
+            KG_TIME=10:09:30 KG_APP=$app sim/build/kronograf_sim --shot shots/${app/:/-}.png
           done
       - uses: actions/upload-artifact@v4
         with:
