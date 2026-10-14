@@ -3,7 +3,7 @@
 [![CI](https://github.com/storagebits/kronograf/actions/workflows/ci.yml/badge.svg)](https://github.com/storagebits/kronograf/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, Montréal weather and real-time bus departures, iPhone notifications, a network engineer's toolbox on the wrist (Wi-Fi analyzer, ping, traceroute, LAN scan, speed test…), a TV remote, a world clock and a sun & moon almanac. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
+**A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, weather and real-time bus departures, iPhone notifications, a network engineer's toolbox on the wrist (Wi-Fi analyzer, ping, traceroute, LAN scan, speed test…), a TV remote, a world clock and a sun & moon almanac. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
 
 <p align="center">
   <img src="docs/screens/kronograf-demo.gif" width="360" alt="Demo: aviator face, time circuits with the lightning easter egg, night face, launcher, weather, an iPhone notification, then the network toolbox and its Wi-Fi analyzer">
