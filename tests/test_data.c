@@ -1,16 +1,22 @@
 /*
  * Host tests for the data parsers (macOS):
- *   cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -o /tmp/kg_test
+ *   cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -lm -o /tmp/kg_test
  *   /tmp/kg_test tests/data/openmeteo-montreal.json [tripUpdates.pb stops]
  * The STM feed (~1 MB, downloaded with the API key) is not committed.
  */
 #include "data/kg_ancs.h"
 #include "data/kg_bus.h"
+#include "data/kg_ir.h"
+#include "data/kg_net.h"
+#include "data/kg_sky.h"
+#include "data/kg_tz.h"
 #include "data/kg_weather.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#include <time.h>
 
 static char *slurp(const char *path, size_t *len)
 {
@@ -64,9 +70,117 @@ static void test_ancs(void)
     assert(!strcmp(tr, "abcd\xC3\xA9"));
 }
 
+
+/* Subnet arithmetic, address parsing, JSON field extraction (no network). */
+static void test_net(void)
+{
+    char a[16];
+    uint32_t ip;
+    assert(kg_ip_parse("192.168.1.20", &ip) && !strcmp(kg_ip_str(ip, a), "192.168.1.20"));
+    assert(!kg_ip_parse("192.168.1", &ip) && !kg_ip_parse("1.2.3.256", &ip) && !kg_ip_parse("1.2.3.4x", &ip));
+    kg_subnet_t s;
+    assert(kg_subnet_parse("10.20.30.40/22", &s) && s.prefix == 22 && s.is_private);
+    assert(!strcmp(kg_ip_str(s.network, a), "10.20.28.0") && !strcmp(kg_ip_str(s.broadcast, a), "10.20.31.255"));
+    assert(!strcmp(kg_ip_str(s.mask, a), "255.255.252.0") && s.hosts == 1022);
+    assert(!strcmp(kg_ip_str(s.first, a), "10.20.28.1") && !strcmp(kg_ip_str(s.last, a), "10.20.31.254"));
+    assert(kg_subnet_parse("172.16.5.4 255.255.255.0", &s) && s.prefix == 24 && s.is_private);
+    assert(kg_subnet_parse("8.8.8.8", &s) && s.prefix == 24 && !s.is_private);
+    assert(kg_subnet_parse("100.64.1.1/10", &s) && s.is_private);
+    assert(kg_subnet_parse("192.0.2.1/31", &s) && s.hosts == 2);
+    assert(kg_subnet_parse("192.0.2.1/32", &s) && s.hosts == 1 && s.first == s.last);
+    assert(kg_subnet_parse("0.0.0.0/0", &s) && s.hosts == 0xFFFFFFFEu);
+    assert(!kg_subnet_parse("1.2.3.4/33", &s) && !kg_subnet_parse("1.2.3.4 255.0.255.0", &s));
+    kg_ip_parse("255.255.255.128", &ip);
+    assert(kg_mask_prefix(ip) == 25);
+    char f[32];
+    const char *json = "{\"status\":\"success\",\"isp\":\"Bell \\\"Canada\\\"\",\"as\": \"AS577\"}";
+    assert(kg_json_str(json, "isp", f, sizeof f) && !strcmp(f, "Bell \"Canada\""));
+    assert(kg_json_str(json, "as", f, sizeof f) && !strcmp(f, "AS577") && !kg_json_str(json, "city", f, sizeof f));
+    assert(!strcmp(kg_port_name(443), "https") && !strcmp(kg_port_name(4), ""));
+    printf("net: subnets, addresses and JSON fields OK\n");
+}
+
+/* POSIX TZ rules against the C library, every 37 minutes over two years. */
+static void test_tz(void)
+{
+    for (int z = 0; z < KG_N_ZONES; z++) {
+        setenv("TZ", KG_ZONES[z].tz, 1);
+        tzset();
+        for (time_t t = 1767225600 /* 2026-01-01 */; t < 1767225600 + 2 * 366 * 86400; t += 37 * 60) {
+            struct tm ref, got;
+            bool dst;
+            localtime_r(&t, &ref);
+            kg_tz_local(KG_ZONES[z].tz, t, &got, &dst);
+            if (ref.tm_hour != got.tm_hour || ref.tm_min != got.tm_min || ref.tm_mday != got.tm_mday ||
+                (ref.tm_isdst > 0) != dst) {
+                printf("tz: %s at %ld: libc %02d:%02d dst %d, kg %02d:%02d dst %d\n", KG_ZONES[z].city, (long)t,
+                       ref.tm_hour, ref.tm_min, ref.tm_isdst, got.tm_hour, got.tm_min, dst);
+                assert(0);
+            }
+        }
+    }
+    unsetenv("TZ");
+    tzset();
+    int y, m, d;
+    kg_civil_from_days(kg_days_from_civil(2024, 2, 29), &y, &m, &d);
+    assert(y == 2024 && m == 2 && d == 29 && kg_days_from_civil(1970, 1, 1) == 0);
+    printf("tz: %d zones match the C library\n", KG_N_ZONES);
+}
+
+/* Sun and Moon against published values (timeanddate.com, ±3 min / ±1 day). */
+static void test_sky(void)
+{
+    kg_sun_t s;
+    kg_sun_day(2026, 6, 21, KG_HOME_LAT, KG_HOME_LON, &s);
+    /* Montréal, June 21 2026: sunrise 5:06, sunset 20:47 EDT (9:06 / 0:47 UTC). */
+    time_t day = (time_t)kg_days_from_civil(2026, 6, 21) * 86400;
+    long rise = (long)(s.rise - day), set = (long)(s.set - day);
+    printf("sky: Montréal 2026-06-21 rise %02ld:%02ld UTC set %02ld:%02ld UTC\n", rise / 3600, rise / 60 % 60,
+           set / 3600 % 24, set / 60 % 60);
+    assert(labs(rise - (9 * 3600 + 6 * 60)) < 180 && labs(set - (24 * 3600 + 47 * 60)) < 180);
+    kg_sun_day(2026, 12, 21, 69.65, 18.96, &s); /* Tromsø: polar night */
+    assert(s.polar_night && !s.rise);
+    /* Phase times within 2 h: new moon of the 2024-04-08 total solar eclipse (18:21 UTC), full moon
+     * of the 2025-03-14 total lunar eclipse (06:55 UTC). */
+    kg_moon_t moon;
+    kg_moon(1712600460 - 5 * 86400, &moon);
+    printf("sky: new moon predicted %+ld min from the 2024-04-08 eclipse\n", (long)(moon.next_new - 1712600460) / 60);
+    assert(labs((long)(moon.next_new - 1712600460)) < 7200);
+    kg_moon(1741935300 - 3 * 86400, &moon);
+    printf("sky: full moon predicted %+ld min from the 2025-03-14 eclipse\n", (long)(moon.next_full - 1741935300) / 60);
+    assert(labs((long)(moon.next_full - 1741935300)) < 7200);
+    kg_moon(1741935300, &moon);
+    assert(moon.illum > 0.995 && !strcmp(moon.name, "Full moon"));
+}
+
+/* Infrared pulse trains: lengths, headers and total durations. */
+static void test_ir(void)
+{
+    kg_ir_frame_t f;
+    assert(kg_ir_encode(KG_IR_NEC, 0x20DF10EF, &f) && f.n == 67 && f.us[0] == 9000 && f.us[1] == 4500);
+    assert(f.us[3] == 560 && f.us[5] == 560 && f.us[7] == 1690); /* 0x2… = 0010: third bit set */
+    assert(kg_ir_encode(KG_IR_SAMSUNG, 0xE0E040BF, &f) && f.n == 67 && f.us[0] == 4500 && f.us[3] == 1690);
+    assert(kg_ir_encode(KG_IR_SONY12, 0xA90, &f) && f.n == 25 && f.us[0] == 2400 && f.us[2] == 1200 &&
+           f.us[4] == 600 && f.repeats == 3 && f.carrier_hz == 40000);
+    /* RC5 power (address 0, command 12): 14 bits = 28 half-bits, minus the idle first one and,
+     * since the last bit is a 0 (mark then space), the idle last one. */
+    assert(kg_ir_encode(KG_IR_RC5, 12, &f));
+    uint32_t total = 0;
+    for (int i = 0; i < f.n; i++) {
+        total += f.us[i];
+        assert(f.us[i] == 889 || f.us[i] == 1778);
+    }
+    assert(total == 26 * 889 && (f.n & 1));
+    printf("ir: NEC, Samsung, Sony and RC5 trains OK (%d brands)\n", KG_IR_N_BRANDS);
+}
+
 int main(int argc, char **argv)
 {
     test_ancs();
+    test_net();
+    test_tz();
+    test_sky();
+    test_ir();
     size_t len;
     char *json = slurp(argv[1], &len);
     assert(json);

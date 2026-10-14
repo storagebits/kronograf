@@ -41,9 +41,15 @@ typedef enum {
     KG_WX_DRIZZLE, KG_WX_RAIN, KG_WX_SNOW, KG_WX_STORM,
 } kg_wx_icon_t;
 
-/* Open-Meteo request (plain HTTP: no personal data, public coordinates of downtown Montréal). */
+/* Home location (downtown Montréal): weather, and sunrise / sunset in the Sky app. */
+#define KG_HOME_LAT 45.5017
+#define KG_HOME_LON -73.5673
+#define KG_STR_(x) #x
+#define KG_STR(x) KG_STR_(x)
+
+/* Open-Meteo request (plain HTTP: no personal data, public coordinates). */
 #define KG_WX_URL                                                                                          \
-    "http://api.open-meteo.com/v1/forecast?latitude=45.5017&longitude=-73.5673"                             \
+    "http://api.open-meteo.com/v1/forecast?latitude=" KG_STR(KG_HOME_LAT) "&longitude=" KG_STR(KG_HOME_LON)  \
     "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m"                       \
     "&hourly=temperature_2m,weather_code,precipitation_probability"                                         \
     "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"               \
