@@ -12,6 +12,7 @@ extern "C" {
 typedef enum {
     KG_ICON_CHRONO, KG_ICON_TIMER, KG_ICON_ALARM, KG_ICON_STEPS, KG_ICON_SETTINGS, KG_ICON_WEATHER,
     KG_ICON_NET, KG_ICON_REMOTE, KG_ICON_SYSTEM, KG_ICON_LEVEL, KG_ICON_WORLD, KG_ICON_SKY, KG_ICON_TORCH,
+    KG_ICON_RADIO, KG_ICON_VIDEO,
 } kg_icon_t;
 
 typedef struct {
@@ -24,7 +25,8 @@ typedef struct {
 } kg_app_t;
 
 extern const kg_app_t kg_app_chrono, kg_app_timer, kg_app_alarms, kg_app_steps, kg_app_weather, kg_app_settings,
-    kg_app_net, kg_app_remote, kg_app_system, kg_app_level, kg_app_world, kg_app_sky, kg_app_torch;
+    kg_app_net, kg_app_remote, kg_app_system, kg_app_level, kg_app_world, kg_app_sky, kg_app_torch, kg_app_radio,
+    kg_app_video;
 
 /* Opens a network tool directly ("ping", "wifi"…), with the toolbox already created. */
 bool ui_net_open(const char *tool);

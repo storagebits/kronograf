@@ -33,9 +33,12 @@ shot t8-sky KG_APP=sky
 shot t8-level KG_APP=level
 shot t8-torch KG_APP=torch
 shot t8-system KG_APP=system
+shot t9-radio KG_APP=radio KG_RADIO=play KG_SETTLE_MS=1200
+shot t9-video KG_APP=video KG_VIDEO_URL=http://192.168.2.50:81/stream KG_SETTLE_MS=600
+shot t9-video-setup KG_APP=video
 
 python3 tools/contact_sheet.py docs/screens/kronograf-overview.png --cols 4 \
   $OUT/t5-aviator-badge.png $OUT/t2-face1.png $OUT/t2-face2.png $OUT/t4-launcher.png \
   $OUT/t4-weather.png $OUT/t5-card.png $OUT/t3-timer.png $OUT/t3-alarms.png \
   $OUT/t8-net-wifi.png $OUT/t8-net-ping.png $OUT/t8-net-trace.png $OUT/t8-net-speed.png \
-  $OUT/t8-world.png $OUT/t8-sky.png $OUT/t6-remote.png $OUT/t8-level.png
+  $OUT/t8-world.png $OUT/t8-sky.png $OUT/t9-radio.png $OUT/t9-video.png
