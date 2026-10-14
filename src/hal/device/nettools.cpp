@@ -158,8 +158,11 @@ static void tool_task(void *)
         unlock();
         /* Wi-Fi power save off while a tool runs: modem sleep adds tens of ms to every round
          * trip, which skews ping and, with lwIP's fixed 5.7 KB TCP window, caps the speed test
-         * below 1 Mbit/s. Back on as soon as the tool returns. */
-        WiFi.setSleep(false);
+         * below 1 Mbit/s. Back on as soon as the tool returns. Only without Bluetooth: Wi-Fi /
+         * BT coexistence requires modem sleep, and turning it off aborts in the Wi-Fi driver
+         * (pm_set_sleep_type, seen in a coredump). */
+        bool no_ps = !ble_active();
+        if (no_ps) WiFi.setSleep(false);
         if (tool == KG_TOOL_LAN) lan_scan();
         else if (tool == KG_TOOL_BLE) {
             lock();
@@ -168,7 +171,7 @@ static void tool_task(void *)
             ble_tool_scan(s_st, &ENV);
         } else kg_tool_run(tool, target, s_st, &ENV);
         kg_tool_end(s_st, &ENV);
-        WiFi.setSleep(true);
+        if (no_ps) WiFi.setSleep(true);
     }
     vTaskDelete(nullptr);
 }
