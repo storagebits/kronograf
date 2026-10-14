@@ -198,15 +198,16 @@ static void demo(kg_tool_t tool, const char *target)
         static const float S[] = {9.1f, 15.2f, 17.8f, 19.4f, 18.2f, 20.6f, 21.9f, 19.7f, 18.9f, 20.3f, 22.1f, 19.8f, 17.4f,
                                   18.8f, 20.1f, 19.2f, 18.6f, 19.9f, 21.2f, 20.4f, 18.3f, 19.5f, 20.8f, 19.1f, 18.7f, 20.2f,
                                   19.6f, 21.4f, 20.0f, 19.3f, 18.5f, 19.7f, 20.9f, 19.4f, 18.8f, 20.5f, 19.0f, 19.8f, 20.3f, 19.6f};
-        for (int i = 0; i < KG_SPEED_HIST; i++) {
-            s_st.speed_hist[s_st.speed_n++] = S[i];
-            if (S[i] > s_st.peak_mbps) s_st.peak_mbps = S[i];
+        for (int i = 0; i < KG_SPEED_HIST; i++) { /* scaled to what the watch measures (D52) */
+            float v = S[i] * 0.08f;
+            s_st.speed_hist[s_st.speed_n++] = v;
+            if (v > s_st.peak_mbps) s_st.peak_mbps = v;
         }
-        s_st.mbps = 19.4f;
-        s_st.bytes = 24250000;
+        s_st.mbps = 1.55f;
+        s_st.bytes = 1940000;
         s_st.elapsed_ms = 10000;
-        s_st.ttfb_ms = 24;
-        snprintf(s_st.status, sizeof s_st.status, "24.3 MB in 10.0 s");
+        s_st.ttfb_ms = 31;
+        snprintf(s_st.status, sizeof s_st.status, "1.9 MB in 10.0 s");
         break;
     }
     case KG_TOOL_PUBLIC:

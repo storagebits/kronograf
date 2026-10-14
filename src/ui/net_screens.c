@@ -398,7 +398,7 @@ const net_tool_t NET_PING = {"Ping", "Latency and packet loss", ping_create, pin
 
 /* ============================================================ speed test */
 
-#define SPEED_FULL 50.0f /* Mbit/s at the end of the dial */
+#define SPEED_FULL 10.0f /* Mbit/s at the end of the dial: the watch tops out around 2 (D52) */
 
 static lv_obj_t *s_arc, *s_big, *s_info, *s_graph, *s_run2;
 
@@ -474,7 +474,7 @@ static lv_obj_t *speed_create(void)
     lv_obj_align(unit, LV_ALIGN_TOP_MID, 0, 122);
     lv_obj_t *z = kit_label(scr, &kg_font_digits_11, KG_C_TEXT_DIM, "0");
     lv_obj_set_pos(z, 64, 152);
-    lv_obj_t *f = kit_label(scr, &kg_font_digits_11, KG_C_TEXT_DIM, "50");
+    lv_obj_t *f = kit_label(scr, &kg_font_digits_11, KG_C_TEXT_DIM, "10");
     lv_obj_set_pos(f, 166, 152);
     s_graph = lv_obj_create(scr);
     lv_obj_remove_style_all(s_graph);
