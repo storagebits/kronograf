@@ -1,7 +1,7 @@
 /*
  * Settings app: brightness, screen timeout, default face, 24 h format, Wi-Fi (scan +
- * password entry on the touch keyboard), iPhone notifications (BLE), followed STM stops,
- * about.
+ * password entry on the touch keyboard), iPhone notifications (BLE), STM API key and
+ * followed stops, about.
  */
 #include "nav.h"
 #include "faces.h"
@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_value, *s_ble_sw, *s_ble_state;
+static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_value, *s_key_value, *s_ble_sw, *s_ble_state;
 static lv_obj_t *s_timeout_btn[4], *s_face_btn[3];
 static const uint16_t TIMEOUTS[4] = {5, 10, 15, 30};
 
@@ -21,8 +21,8 @@ static lv_obj_t *s_wifi_scr, *s_wifi_list, *s_wifi_state, *s_kb_panel, *s_ta, *s
 static lv_timer_t *s_scan_timer;
 static char s_chosen[33];
 
-/* "STM stop" screen */
-static lv_obj_t *s_stop_scr, *s_stop_ta, *s_settings_scr;
+/* "STM stop" and "STM API key" screens */
+static lv_obj_t *s_stop_scr, *s_stop_ta, *s_key_scr, *s_key_ta, *s_settings_scr;
 
 /* ------------------------------------------------------------- components */
 
@@ -75,10 +75,12 @@ static void refresh(void)
     static const char *const ST[] = {"Off", "Waiting for the iPhone", "Pairing…", "Connecting…", "iPhone connected"};
     lv_label_set_text(s_ble_state, ST[hal_ble_state()]);
 
-    if (s_bus_value) {
-        const char *stops = hal_bus_stops();
-        lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "No stop selected");
-    }
+    const char *stops = hal_bus_stops();
+    lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "No stop selected");
+    char hint[16];
+    hal_bus_key_hint(hint, sizeof hint);
+    if (hint[0]) lv_label_set_text_fmt(s_key_value, "API key %s", hint);
+    else lv_label_set_text(s_key_value, "API key: none");
 
     const kg_inventory_t *inv = hal_inventory();
     lv_label_set_text_fmt(s_about, "Kronograf · T-Watch 2020 V%d\nFlash %lu MB · PSRAM %lu KB", inv->rev,
@@ -310,6 +312,60 @@ static void stop_open_cb(lv_event_t *e)
     lv_scr_load(s_stop_scr);
 }
 
+/* ------------------------------------------------------------ STM API key */
+
+static void key_kb_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_READY) {
+        hal_bus_set_key(lv_textarea_get_text(s_key_ta));
+        kit_tick();
+    }
+    lv_textarea_set_text(s_key_ta, ""); /* the key does not stay on screen */
+    refresh();
+    lv_scr_load(s_settings_scr);
+}
+
+static lv_obj_t *key_screen(void)
+{
+    lv_obj_t *scr = kit_screen();
+    kit_title(scr, "STM API KEY");
+    lv_obj_t *hint = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "From the STM developer portal.\nLeave empty to remove it.");
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 20);
+    s_key_ta = lv_textarea_create(scr);
+    lv_textarea_set_one_line(s_key_ta, true);
+    lv_textarea_set_max_length(s_key_ta, 95);
+    lv_obj_set_size(s_key_ta, 228, 36);
+    lv_obj_align(s_key_ta, LV_ALIGN_TOP_MID, 0, 58);
+    lv_obj_set_style_text_font(s_key_ta, &kg_font_label_20, 0);
+    lv_obj_set_style_bg_color(s_key_ta, KG_C_SURFACE, 0);
+    lv_obj_set_style_text_color(s_key_ta, KG_C_TEXT, 0);
+    lv_obj_set_style_border_color(s_key_ta, KG_C_ACCENT, 0);
+    lv_obj_t *kb = lv_keyboard_create(scr);
+    lv_obj_set_size(kb, KG_W, 140);
+    lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(kb, s_key_ta);
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_bg_color(kb, KG_C_BG, 0);
+    lv_obj_set_style_pad_all(kb, 2, 0);
+    lv_obj_set_style_pad_gap(kb, 2, 0);
+    lv_obj_set_style_bg_color(kb, KG_C_BTN, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(kb, KG_C_TEXT, LV_PART_ITEMS);
+    lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+    lv_obj_add_event_cb(kb, key_kb_cb, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(kb, key_kb_cb, LV_EVENT_CANCEL, NULL);
+    ui_nav_attach_back_gesture(scr);
+    return scr;
+}
+
+static void key_open_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!s_key_scr) s_key_scr = key_screen();
+    lv_textarea_set_text(s_key_ta, "");
+    lv_scr_load(s_key_scr);
+}
+
 /* ----------------------------------------------------------------- screen */
 
 static lv_obj_t *small_button(lv_obj_t *parent, const char *text, lv_coord_t w, lv_event_cb_t cb, int i)
@@ -399,17 +455,23 @@ static lv_obj_t *create(void)
     lv_obj_t *chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
     lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
 
-    if (hal_bus_available()) { /* without an STM key, the section does not exist */
-        section("STM BUSES");
-        r = row(42);
-        lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(r, KG_C_BTN_PRESS, LV_STATE_PRESSED);
-        lv_obj_add_event_cb(r, stop_open_cb, LV_EVENT_CLICKED, NULL);
-        s_bus_value = kit_label(r, &kg_font_text_16, KG_C_TEXT, "");
-        lv_obj_align(s_bus_value, LV_ALIGN_LEFT_MID, 14, 0);
-        chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
-        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
-    }
+    section("STM BUSES");
+    r = row(42);
+    lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(r, KG_C_BTN_PRESS, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(r, key_open_cb, LV_EVENT_CLICKED, NULL);
+    s_key_value = kit_label(r, &kg_font_text_16, KG_C_TEXT, "");
+    lv_obj_align(s_key_value, LV_ALIGN_LEFT_MID, 14, 0);
+    chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
+    lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
+    r = row(42);
+    lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(r, KG_C_BTN_PRESS, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(r, stop_open_cb, LV_EVENT_CLICKED, NULL);
+    s_bus_value = kit_label(r, &kg_font_text_16, KG_C_TEXT, "");
+    lv_obj_align(s_bus_value, LV_ALIGN_LEFT_MID, 14, 0);
+    chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
+    lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
 
     section("ABOUT");
     r = row(46);

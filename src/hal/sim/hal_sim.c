@@ -202,7 +202,14 @@ bool hal_weather_busy(void) { return false; }
 
 /* Buses: KG_BUS=0 without an STM key, KG_BUS_STOPS="" with no stop selected. */
 static char s_stops[40] = "52345";
-bool hal_bus_available(void) { return env_int("KG_BUS", 1) != 0; }
+static char s_key[96] = "demo";
+bool hal_bus_available(void) { return env_int("KG_BUS", 1) != 0 && s_key[0]; }
+void hal_bus_set_key(const char *key) { snprintf(s_key, sizeof s_key, "%s", key); }
+void hal_bus_key_hint(char *out, size_t n)
+{
+    size_t len = strlen(s_key);
+    snprintf(out, n, "%s%s", len ? "…" : "", len > 4 ? s_key + len - 4 : s_key);
+}
 const char *hal_bus_stops(void)
 {
     const char *e = getenv("KG_BUS_STOPS");
@@ -231,7 +238,7 @@ void hal_bus_refresh(uint32_t max_age_s) { (void)max_age_s; }
 
 const char *hal_bus_status(void)
 {
-    if (!hal_bus_available()) return "No STM API key (secrets.h)";
+    if (!hal_bus_available()) return "No STM API key (Settings)";
     return hal_bus_stops()[0] ? NULL : "No stop selected";
 }
 

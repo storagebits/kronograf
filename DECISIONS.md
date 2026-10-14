@@ -112,3 +112,7 @@ Each entry: decision — rationale. Most recent at the bottom.
 ## Publication — 2026-10-13
 
 **D46. Everything in English.** Code, comments, the watch UI, console output, documentation and commit messages are in English, so the repository can be published and read by anyone. The fonts keep their accented glyphs: iPhone notifications and place names (Montréal) still need them. The Time circuits face now reads like the film: MONTH / DAY / HOUR MIN, DESTINATION TIME, PRESENT TIME, LAST TIME DEPARTED.
+
+**D47. STM API key entered on the watch.** A firmware built without `secrets.h` (a public release) must still be able to show buses. The key can be typed in Settings → STM buses (touch keyboard, cleared from the screen once confirmed) or sent over the console (`bus key <key>`, `bus key clear`). It is stored in NVS (`kgnet`/`stmkey`), like the Wi-Fi password, and takes precedence over `secrets.h`. It is never displayed or echoed in full: only its last four characters ("…ab12").
+
+**D48. Releases built by GitHub Actions only.** A `firmware.bin` built locally embeds the contents of `secrets.h` in clear text (Wi-Fi password, STM key): it must never be published. Pushing a `v*` tag runs `release.yml`, which builds on GitHub — where `secrets.h` does not exist, and the job checks it — then publishes the application binary, a merged image to flash at 0x0, and their SHA-256 sums.

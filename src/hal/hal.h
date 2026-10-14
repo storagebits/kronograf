@@ -112,8 +112,11 @@ void hal_weather_refresh(uint32_t max_age_s);
 const char *hal_weather_status(void); /* last error, NULL if the last request succeeded */
 bool hal_weather_busy(void);
 
-/* STM buses (GTFS realtime): only when an API key is provided in secrets.h. */
+/* STM buses (GTFS realtime): only when an API key is available — entered on the watch or
+ * over the console (NVS), or from secrets.h. */
 bool hal_bus_available(void);
+void hal_bus_set_key(const char *key);   /* persistent; "" = back to the secrets.h key, if any */
+void hal_bus_key_hint(char *out, size_t n); /* "…ab12" (last 4 characters), "" when there is no key */
 const char *hal_bus_stops(void);          /* followed stop codes, "52345,52346" ("": none) */
 void hal_bus_set_stops(const char *stops);
 bool hal_bus(kg_bus_t *out);

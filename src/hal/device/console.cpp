@@ -14,7 +14,7 @@
  *   battsim <0|1>  simulates battery on USB (light-sleep test)
  *   power [min]    measures current on USB, with simulated battery and the screen off
  *   weather [refresh]   latest weather reading
- *   bus [refresh | stops <codes>]  next departures, followed stops
+ *   bus [refresh | stops <codes> | key <key> | key clear]  departures, stops, STM API key
  *   ble [on | off | forget]  BLE state, ANCS counters, notifications
  *   beep        short beep (speaker test)
  *   egg         triggers the Time circuits discharge
@@ -249,6 +249,11 @@ static void run(char *cmd)
                           st ? " — " : "", st ? st : "");
         else s_out->printf("weather: no reading (%s)\n", st ? st : "?");
         if (hal_weather_busy()) s_out->println("update in progress");
+    } else if (!strncmp(cmd, "bus key ", 8)) {
+        hal_bus_set_key(strcmp(cmd + 8, "clear") ? cmd + 8 : "");
+        char hint[16];
+        hal_bus_key_hint(hint, sizeof hint);
+        s_out->printf("bus: STM API key %s%s\n", hint[0] ? "set " : "cleared", hint); /* never echoed in full */
     } else if (!strcmp(cmd, "bus") || !strcmp(cmd, "bus refresh") || !strncmp(cmd, "bus stops ", 10)) {
         if (!strncmp(cmd, "bus stops ", 10)) hal_bus_set_stops(cmd + 10);
         if (cmd[3]) hal_bus_refresh(0);
@@ -304,7 +309,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes>] | ble [on|off|forget] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes> | key <key>] | ble [on|off|forget] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("unknown command: %s\n", cmd);
 }
 

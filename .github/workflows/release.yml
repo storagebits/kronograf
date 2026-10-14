@@ -1,0 +1,56 @@
+name: Release
+
+# Pushing a tag such as v0.5.0 builds the firmware on GitHub — where include/secrets.h does
+# not exist, so the binaries carry no Wi-Fi credentials or API key — and publishes it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PlatformIO
+        run: pip install platformio==6.2.0
+      - name: Make sure no secrets are compiled in
+        run: test ! -e include/secrets.h
+      - name: Build
+        run: pio run -e twatch-v1
+      - name: Package
+        run: |
+          B=.pio/build/twatch-v1
+          BOOT_APP0=~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin
+          mkdir dist
+          cp $B/firmware.bin dist/kronograf-${GITHUB_REF_NAME}-twatch-v1-app.bin
+          pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32 merge_bin \
+            -o dist/kronograf-${GITHUB_REF_NAME}-twatch-v1-full.bin \
+            --flash_mode keep --flash_freq keep --flash_size 16MB \
+            0x1000 $B/bootloader.bin 0x8000 $B/partitions.bin 0xe000 $BOOT_APP0 0x10000 $B/firmware.bin
+          (cd dist && sha256sum *.bin > SHA256SUMS)
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<EOF
+          Firmware for the **LilyGO T-Watch 2020 V1**, built by GitHub Actions from \`${GITHUB_SHA::7}\`.
+          These binaries contain no Wi-Fi credentials and no API key.
+
+          **First install** — back up your watch first (\`tools/backup_flash.sh\`), then:
+
+              esptool.py --chip esp32 --port /dev/cu.usbserial-XXXX --baud 230400 write_flash 0 kronograf-${GITHUB_REF_NAME}-twatch-v1-full.bin
+
+          **Update** of a watch already running Kronograf: flash \`…-app.bin\` at \`0x10000\`, or use OTA.
+
+          **After flashing:** pick a network in Settings → Wi-Fi. For STM bus departures, add your API key in
+          Settings → STM buses, or over the console: \`tools/kg.py bus key <your key>\`.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Kronograf $GITHUB_REF_NAME" --notes-file notes.md

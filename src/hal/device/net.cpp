@@ -27,13 +27,16 @@ static volatile time_t s_last_sync;
 /* Credentials: those entered on the watch (NVS "kgnet") take precedence over secrets.h. */
 static char s_ssid[33], s_pass[65];
 static char s_stops[40];
+static char s_stm_key[96];
 
 static void load_credentials(void)
 {
     Preferences p;
     p.begin("kgnet", true);
     String ssid = p.getString("ssid", ""), pass = p.getString("pass", ""), stops = p.getString("stops", "");
+    String key = p.getString("stmkey", "");
     p.end();
+    snprintf(s_stm_key, sizeof s_stm_key, "%s", key.length() ? key.c_str() : KG_STM_API_KEY);
     if (ssid.length()) {
         snprintf(s_ssid, sizeof s_ssid, "%s", ssid.c_str());
         snprintf(s_pass, sizeof s_pass, "%s", pass.c_str());
@@ -165,7 +168,7 @@ static void do_bus(void)
     HTTPClient http;
     http.setTimeout(10000);
     http.begin(tls, KG_BUS_URL);
-    http.addHeader("apiKey", KG_STM_API_KEY);
+    http.addHeader("apiKey", s_stm_key);
     http.addHeader("Accept-Encoding", "identity");
     uint32_t heap_min = ESP.getMinFreeHeap();
     int code = http.GET();
@@ -333,7 +336,28 @@ const char *hal_weather_status(void) { return s_wx_status; }
 
 bool hal_weather_busy(void) { return s_wx_busy; }
 
-bool hal_bus_available(void) { return sizeof(KG_STM_API_KEY) > 1; }
+bool hal_bus_available(void) { return s_stm_key[0] != 0; }
+
+void hal_bus_set_key(const char *key)
+{
+    Preferences p;
+    p.begin("kgnet", false);
+    if (key[0]) p.putString("stmkey", key);
+    else p.remove("stmkey");
+    p.end();
+    snprintf(s_stm_key, sizeof s_stm_key, "%s", key[0] ? key : KG_STM_API_KEY);
+    portENTER_CRITICAL(&s_mux);
+    s_bus.valid = false;
+    s_bus.n = 0;
+    portEXIT_CRITICAL(&s_mux);
+    s_bus_status = "No data yet";
+}
+
+void hal_bus_key_hint(char *out, size_t n)
+{
+    size_t len = strlen(s_stm_key);
+    snprintf(out, n, "%s%s", len ? "…" : "", len > 4 ? s_stm_key + len - 4 : "");
+}
 
 const char *hal_bus_stops(void) { return s_stops; }
 
@@ -375,7 +399,7 @@ int net_bus_last_error(void) { return s_bus_err; }
 
 const char *hal_bus_status(void)
 {
-    if (!hal_bus_available()) return "No STM API key (secrets.h)";
+    if (!hal_bus_available()) return "No STM API key (Settings)";
     return s_bus_busy ? "Updating…" : s_bus_status;
 }
 

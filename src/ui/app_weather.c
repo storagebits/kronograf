@@ -115,7 +115,7 @@ static void refresh_bus(void)
 {
     if (!hal_bus_available()) {
         lv_obj_add_flag(s_bus_title, LV_OBJ_FLAG_HIDDEN);
-        bus_hint("STM buses: no API key in secrets.h");
+        bus_hint("STM buses: add an API key in Settings");
         return;
     }
     lv_obj_clear_flag(s_bus_title, LV_OBJ_FLAG_HIDDEN);

@@ -50,6 +50,10 @@ The simulated HAL is driven by environment variables: `KG_TIME`, `KG_FACE`, `KG_
 
 ### Watch
 
+**Prebuilt firmware**: every [release](https://github.com/storagebits/kronograf/releases) ships binaries built by GitHub Actions, with no credentials inside, and flashing instructions. Wi-Fi and the STM key are then set up on the watch.
+
+**From source:**
+
 ```sh
 # First of all: back up the original flash (16 MB, a few minutes)
 tools/backup_flash.sh
@@ -73,7 +77,7 @@ tools/kg.py status                        # console: TCP when the watch is reach
 | Key | Purpose |
 |---|---|
 | `KG_WIFI_SSID`, `KG_WIFI_PASS` | Default network (it can also be picked on the watch: Settings → Wi-Fi) |
-| `KG_STM_API_KEY` | Key from the [STM developer portal](https://www.stm.info/en/about/developers) for bus departures |
+| `KG_STM_API_KEY` | Key from the [STM developer portal](https://www.stm.info/en/about/developers) for bus departures — it can also be entered on the watch (Settings → STM buses) or over the console (`tools/kg.py bus key <key>`) |
 | `KG_OTA_PASS` | Password for OTA updates (recommended) |
 
 Bus stops are entered on the watch (Settings → STM buses). The weather location lives in `src/data/kg_weather.h` (downtown Montréal by default).
@@ -88,7 +92,7 @@ Bus stops are entered on the watch (Settings → STM buses). The weather locatio
 status        memory, FPS, battery, cause of the last reboot
 screenshot f  LVGL capture → PNG              lcdtest       R | G | B test pattern outside LVGL
 battlog       battery-life log                power <min>   current measured on USB, simulated battery
-weather [refresh]   bus [refresh | stops <codes>]   ble [on | off | forget]
+weather [refresh]   bus [refresh | stops <codes> | key <key>]   ble [on | off | forget]
 sleep | wake | bl <n> | timeout <s> | face <n> | app <name> | timer <s> | coredump | reboot
 ```
 
