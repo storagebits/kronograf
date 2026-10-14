@@ -65,7 +65,9 @@ static volatile uint32_t s_hold_until;
 static bool s_kept;
 static constexpr uint32_t HOLD_MS = 20000;
 
-bool net_hold_active(void) { return s_hold_until && (int32_t)(s_hold_until - millis()) > 0; }
+static volatile bool s_keep; /* radio playing */
+
+bool net_hold_active(void) { return s_keep || (s_hold_until && (int32_t)(s_hold_until - millis()) > 0); }
 
 static constexpr uint32_t WIFI_TIMEOUT_MS = 15000;
 static constexpr uint32_t NTP_TIMEOUT_MS = 10000;
@@ -462,6 +464,12 @@ void hal_net_hold(void)
 }
 
 void hal_net_release(void) { s_hold_until = 0; }
+
+void net_keep(bool on)
+{
+    s_keep = on;
+    if (on) hal_net_hold();
+}
 
 /* Lease lapsed (toolbox closed, screen off): stop the tools, then Wi-Fi. */
 static void hold_check(void)

@@ -59,6 +59,8 @@ struct tone_job {
 };
 static QueueHandle_t s_audio_q;
 static bool s_i2s_ready;
+static SemaphoreHandle_t s_i2s_mx; /* one user of the speaker at a time: tones or a stream */
+static bool s_streaming;
 
 bool hal_sound_available(void)
 {
@@ -70,16 +72,16 @@ bool hal_sound_available(void)
 }
 
 #ifdef PIN_I2S_DOUT
-static void i2s_start(void)
+static void i2s_start(uint32_t rate = SAMPLE_RATE, int dma_bufs = 4)
 {
     if (s_i2s_ready) return;
     i2s_config_t cfg = {};
     cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
-    cfg.sample_rate = SAMPLE_RATE;
+    cfg.sample_rate = rate;
     cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
     cfg.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;
     cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-    cfg.dma_buf_count = 4;
+    cfg.dma_buf_count = dma_bufs;
     cfg.dma_buf_len = 256;
     cfg.tx_desc_auto_clear = true; /* silence if the task falls behind */
     i2s_pin_config_t pins = {};
@@ -125,6 +127,7 @@ static void audio_task(void *)
     tone_job job;
     for (;;) {
         if (xQueueReceive(s_audio_q, &job, portMAX_DELAY) != pdTRUE) continue;
+        if (xSemaphoreTake(s_i2s_mx, 0) != pdTRUE) continue; /* the radio is playing: no beeps */
         pmu_audio_power(true);
         vTaskDelay(pdMS_TO_TICKS(20)); /* let the amplifier settle */
         i2s_start();
@@ -134,9 +137,56 @@ static void audio_task(void *)
         play_tone({0, 40}); /* flush the DMA buffers before powering down */
         i2s_stop();
         pmu_audio_power(false);
+        xSemaphoreGive(s_i2s_mx);
     }
 }
 #endif
+
+/* Audio stream (radio): 16-bit mono at the stream's rate, 8 DMA buffers (~45 ms at 44.1 kHz)
+ * smoothing the decoder's bursts. Tones are dropped while a stream owns the speaker. */
+bool audio_stream_open(uint32_t rate)
+{
+#ifdef PIN_I2S_DOUT
+    if (!hal_sound_available() || !s_i2s_mx) return false;
+    if (!s_streaming) {
+        if (xSemaphoreTake(s_i2s_mx, pdMS_TO_TICKS(2000)) != pdTRUE) return false;
+        pmu_audio_power(true);
+        vTaskDelay(pdMS_TO_TICKS(20));
+        s_streaming = true;
+    }
+    i2s_stop();
+    i2s_start(rate, 8);
+    return s_i2s_ready;
+#else
+    (void)rate;
+    return false;
+#endif
+}
+
+void audio_stream_write(const int16_t *samples, size_t n)
+{
+#ifdef PIN_I2S_DOUT
+    size_t written;
+    if (s_streaming && s_i2s_ready) i2s_write(I2S_NUM_0, samples, n * sizeof(int16_t), &written, portMAX_DELAY);
+#else
+    (void)samples;
+    (void)n;
+#endif
+}
+
+void audio_stream_close(void)
+{
+#ifdef PIN_I2S_DOUT
+    if (!s_streaming) return;
+    static const int16_t silence[256] = {};
+    size_t written;
+    if (s_i2s_ready) i2s_write(I2S_NUM_0, silence, sizeof silence, &written, portMAX_DELAY);
+    i2s_stop();
+    pmu_audio_power(false);
+    s_streaming = false;
+    xSemaphoreGive(s_i2s_mx);
+#endif
+}
 
 void hal_tones(const kg_tone_t *tones, uint8_t n)
 {
@@ -164,6 +214,7 @@ void feedback_init(void)
 #endif
 #ifdef PIN_I2S_DOUT
     s_audio_q = xQueueCreate(2, sizeof(tone_job));
+    s_i2s_mx = xSemaphoreCreateMutex();
     /* Core 0, medium priority: sound must not stutter; the UI stays on core 1. */
     xTaskCreatePinnedToCore(audio_task, "kg_audio", 3072, nullptr, 5, nullptr, 0);
 #endif

@@ -19,6 +19,8 @@
  *   ble [on | off | forget]  BLE state, ANCS counters, notifications
  *   net [<tool> [target]]  network toolbox: ping, trace, dns, ports, lan, speed, public, ble
  *                          (starts it; "net" alone prints its progress and renews the Wi-Fi lease)
+ *   radio [play <n> | stop | vol <0-20> | url <http://…>]  web radio (n: station, "custom" for the URL)
+ *   video [play | stop | url <http://…>]  MJPEG camera stream (plays while the Video app is open)
  *   sys         system information (as in the System app)
  *   accel       accelerometer reading in g
  *   ir [<brand> <key>]  sends a TV code (brand 0-3, key 0 power … 6 input)
@@ -341,6 +343,22 @@ static void run(char *cmd)
         }
     } else if (!strcmp(cmd, "net") || !strncmp(cmd, "net ", 4)) {
         cmd_net(cmd[3] ? cmd + 4 : "");
+    } else if (!strcmp(cmd, "radio") || !strncmp(cmd, "radio ", 6)) {
+        int n;
+        if (!strncmp(cmd, "radio url ", 10)) hal_radio_set_custom_url(cmd + 10);
+        else if (!strcmp(cmd, "radio stop")) hal_radio_stop();
+        else if (sscanf(cmd, "radio vol %d", &n) == 1) hal_radio_set_volume((uint8_t)(n < 0 ? 0 : n));
+        else if (!strcmp(cmd, "radio play custom") && hal_radio_custom_url()[0]) hal_radio_play("Custom", hal_radio_custom_url());
+        else if (sscanf(cmd, "radio play %d", &n) == 1 && n >= 0 && n < KG_N_STATIONS)
+            hal_radio_play(KG_STATIONS[n].name, KG_STATIONS[n].url);
+        for (int i = 0; i < KG_N_STATIONS && !strcmp(cmd, "radio"); i++) s_out->printf("  %d  %s\n", i, KG_STATIONS[i].name);
+        media_print(*s_out);
+    } else if (!strcmp(cmd, "video") || !strncmp(cmd, "video ", 6)) {
+        if (!strncmp(cmd, "video url ", 10)) hal_video_set_url(cmd + 10);
+        else if (!strcmp(cmd, "video stop")) hal_video_stop();
+        else if (!strcmp(cmd, "video play") && hal_video_url()[0]) hal_video_start(hal_video_url());
+        s_out->printf("video url: %s\n", hal_video_url()[0] ? hal_video_url() : "(none)");
+        media_print(*s_out);
     } else if (!strcmp(cmd, "sys")) {
         cmd_sys();
     } else if (!strcmp(cmd, "accel")) {
@@ -384,7 +402,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes> | key <key>] | ble [on|off|forget] | net [<tool> [target]] | sys | accel | ir [<brand> <key>] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes> | key <key>] | ble [on|off|forget] | net [<tool> [target]] | radio [play <n>|stop|vol <n>|url <u>] | video [play|stop|url <u>] | sys | accel | ir [<brand> <key>] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("unknown command: %s\n", cmd);
 }
 

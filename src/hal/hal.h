@@ -12,6 +12,7 @@
 #include "../data/kg_ancs.h"
 #include "../data/kg_bus.h"
 #include "../data/kg_ir.h"
+#include "../data/kg_media.h"
 #include "../data/kg_net.h"
 #include "../data/kg_tools.h"
 #include "../data/kg_weather.h"
@@ -173,6 +174,26 @@ bool hal_wifi_scan_ap(int i, kg_ap_t *out);
 void hal_tool_start(kg_tool_t tool, const char *target);
 void hal_tool_stop(void);
 void hal_tool_get(kg_tool_state_t *out);
+
+/* ------------------------------------------------------------------ media
+ * Radio: MP3 web radio on the speaker; keeps Wi-Fi on while it plays, screen off included.
+ * Video: MJPEG camera stream; runs while the app is on screen (the UI holds the Wi-Fi lease).
+ * URLs are http:// only (no TLS). */
+void hal_radio_play(const char *name, const char *url);
+void hal_radio_stop(void);
+void hal_radio_status(kg_radio_status_t *out);
+void hal_radio_set_volume(uint8_t volume);         /* 0..KG_RADIO_VOL_MAX, persistent */
+uint8_t hal_radio_volume(void);
+const char *hal_radio_custom_url(void);            /* "" if none */
+void hal_radio_set_custom_url(const char *url);    /* persistent */
+
+void hal_video_start(const char *url);
+void hal_video_stop(void);
+void hal_video_status(kg_video_status_t *out);
+/* Latest frame (KG_VIDEO_W × KG_VIDEO_H, LVGL's RGB565), valid until the next call; NULL if none. */
+const uint16_t *hal_video_frame(uint32_t *seq);
+const char *hal_video_url(void);                   /* "" if none */
+void hal_video_set_url(const char *url);           /* persistent */
 
 /* ---------------------------------------------------------------- sensors */
 
