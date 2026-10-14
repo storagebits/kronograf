@@ -275,6 +275,16 @@ int hal_notif_count(void)
     return hal_ble_state() == KG_BLE_OFF ? 0 : k;
 }
 
+/* ANCS date "YYYYMMDDTHHMMSS" for today at `minutes` past midnight. */
+static void notif_date(kg_notif_t *n, const struct tm *t, int minutes)
+{
+    char buf[48];
+    if (minutes < 0) minutes = 0;
+    snprintf(buf, sizeof buf, "%04d%02d%02dT%02d%02d00", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, minutes / 60,
+             minutes % 60);
+    snprintf(n->date, sizeof n->date, "%.15s", buf);
+}
+
 bool hal_notif_get(int i, kg_notif_t *out)
 {
     int n = env_int("KG_NOTIF", 3);
@@ -286,14 +296,10 @@ bool hal_notif_get(int i, kg_notif_t *out)
             static const int MIN_AGO[] = {1, 25, 70, 0};
             struct tm t;
             hal_now(&t, NULL);
-            int m = t.tm_hour * 60 + t.tm_min - MIN_AGO[k];
-            if (m < 0) m = 0;
-            snprintf(out->date, sizeof out->date, "%04d%02d%02dT%02d%02d00", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                     m / 60, m % 60);
+            notif_date(out, &t, t.tm_hour * 60 + t.tm_min - MIN_AGO[k]);
             if (k == 0 && env_int("KG_NOTIF_CAT", -1) == KG_CAT_CALL) { /* the incoming call comes first */
                 *out = DEMO_NOTIFS[3];
-                snprintf(out->date, sizeof out->date, "%04d%02d%02dT%02d%02d00", t.tm_year + 1900, t.tm_mon + 1,
-                         t.tm_mday, t.tm_hour, t.tm_min);
+                notif_date(out, &t, t.tm_hour * 60 + t.tm_min);
             } else if (k == 0 && getenv("KG_NOTIF_CAT")) {
                 out->category = (uint8_t)env_int("KG_NOTIF_CAT", 4);
             }
