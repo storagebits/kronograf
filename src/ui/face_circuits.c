@@ -113,7 +113,7 @@ static lv_obj_t *row(lv_obj_t *parent, lv_coord_t y, lv_color_t color, const cha
 
 static void show(row_t *r, const struct tm *t)
 {
-    char buf[8];
+    char buf[24];
     if (!t) {
         seg7_set_text(r->day, "--");
         seg7_set_text(r->month, "--");
