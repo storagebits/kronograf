@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <stdlib.h>
+#include <strings.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/select.h>
@@ -285,67 +287,137 @@ int kg_resolve(const char *host, uint32_t *ips, int max, uint32_t *ms)
 
 /* ------------------------------------------------------------------ HTTP */
 
-int kg_http_get(const char *host, const char *path, kg_http_sink_t sink, void *ctx, uint32_t timeout_ms,
-                uint32_t *ttfb_us, volatile bool *cancel)
+bool kg_url_parse(const char *url, kg_url_t *u)
+{
+    memset(u, 0, sizeof *u);
+    if (strncmp(url, "http://", 7)) return false; /* no TLS: plain HTTP only */
+    const char *h = url + 7, *end = h + strcspn(h, ":/?");
+    if (end == h || (size_t)(end - h) >= sizeof u->host) return false;
+    memcpy(u->host, h, (size_t)(end - h));
+    u->port = 80;
+    if (*end == ':') {
+        unsigned port = (unsigned)strtoul(end + 1, (char **)&end, 10);
+        if (!port || port > 65535) return false;
+        u->port = (uint16_t)port;
+    }
+    snprintf(u->path, sizeof u->path, "%s", *end ? end : "/");
+    if (u->path[0] != '/') { /* "http://host?x" */
+        memmove(u->path + 1, u->path, sizeof u->path - 1);
+        u->path[0] = '/';
+        u->path[sizeof u->path - 1] = 0;
+    }
+    return strlen(end) < sizeof u->path;
+}
+
+/* One request, no redirect. Headers are handed to the callback line by line; the
+ * "Location" of a redirect is copied to `location`. */
+static int http_once(const kg_http_req_t *r, const kg_url_t *u, char *location, size_t loc_n)
 {
     uint32_t ip;
-    if (ttfb_us) *ttfb_us = 0;
-    if (kg_resolve(host, &ip, 1, NULL) != 1) return -1;
+    if (r->ttfb_us) *r->ttfb_us = 0;
+    if (kg_resolve(u->host, &ip, 1, NULL) != 1) return -1;
+    uint32_t idle = r->idle_ms ? r->idle_ms : 10000;
     int state;
-    int fd = tcp_connect(ip, 80, timeout_ms < 5000 ? timeout_ms : 5000, &state);
+    int fd = tcp_connect(ip, u->port, idle < 5000 ? idle : 5000, &state);
     if (fd < 0 || state != 1) {
         if (fd >= 0) close(fd);
         return -2;
     }
-    char req[256];
-    int len = snprintf(req, sizeof req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Kronograf\r\nAccept: */*\r\n\r\n",
-                       path, host);
-    int64_t t0 = kg_net_us(), deadline = t0 + (int64_t)timeout_ms * 1000;
+    char req[512];
+    int len = snprintf(req, sizeof req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Kronograf\r\nAccept: */*\r\n%s\r\n", u->path,
+                       u->host, r->headers ? r->headers : "");
+    int64_t t0 = kg_net_us(), last = t0, deadline = r->timeout_ms ? t0 + (int64_t)r->timeout_ms * 1000 : 0;
     if (len <= 0 || len >= (int)sizeof req || send(fd, req, (size_t)len, 0) != len) {
         close(fd);
         return -2;
     }
 
-    char line[64]; /* status line */
+    char line[256]; /* current header line */
     size_t ll = 0;
     int status = -3;
-    uint32_t crlf = 0; /* last 4 header bytes, to spot the blank line */
-    bool in_body = false;
+    bool in_body = false, first = true;
     uint8_t buf[1460];
     for (;;) {
-        if (cancel && *cancel) break;
-        int64_t left = deadline - kg_net_us();
-        if (left <= 0) break;
+        if (r->cancel && *r->cancel) break;
+        int64_t now = kg_net_us();
+        if ((deadline && now >= deadline) || now - last >= (int64_t)idle * 1000) break;
         fd_set rd;
         FD_ZERO(&rd);
         FD_SET(fd, &rd);
-        struct timeval tv = {(long)(left / 1000000), (int)(left % 1000000)};
-        if (left > 250000) tv.tv_sec = 0, tv.tv_usec = 250000; /* wakes up to check `cancel` */
+        struct timeval tv = {0, 250000}; /* wakes up to check `cancel` and the timeouts */
         int s = select(fd + 1, &rd, NULL, NULL, &tv);
         if (s < 0) break;
         if (s == 0) continue;
         ssize_t got = recv(fd, buf, sizeof buf, 0);
         if (got <= 0) break; /* end of the response (HTTP/1.0: connection closed) */
-        if (ttfb_us && !*ttfb_us) *ttfb_us = (uint32_t)(kg_net_us() - t0);
+        last = kg_net_us();
+        if (r->ttfb_us && !*r->ttfb_us) *r->ttfb_us = (uint32_t)(last - t0);
         const uint8_t *p = buf;
         size_t n = (size_t)got;
-        while (!in_body && n) { /* headers, of any length: only the status line is kept */
-            uint8_t ch = *p++;
+        while (!in_body && n) { /* headers, line by line; overlong lines are truncated */
+            char ch = (char)*p++;
             n--;
-            if (status == -3 && ll < sizeof line - 1 && ch != '\r' && ch != '\n') line[ll++] = (char)ch;
-            if (status == -3 && ch == '\n') {
-                line[ll] = 0;
-                int code;
-                status = sscanf(line, "HTTP/%*d.%*d %d", &code) == 1 ? code : -4;
+            if (ch == '\r') continue;
+            if (ch != '\n') {
+                if (ll < sizeof line - 1) line[ll++] = ch;
+                continue;
             }
-            crlf = crlf << 8 | ch;
-            in_body = crlf == 0x0D0A0D0A;
+            line[ll] = 0;
+            ll = 0;
+            if (first) { /* "HTTP/1.1 200 OK", or "ICY 200 OK" from SHOUTcast servers */
+                int code;
+                first = false;
+                if (sscanf(line, "HTTP/%*d.%*d %d", &code) == 1 || sscanf(line, "ICY %d", &code) == 1) status = code;
+                else status = -4;
+                if (status < 0) break;
+                continue;
+            }
+            if (!line[0]) {
+                in_body = true;
+                break;
+            }
+            char *colon = strchr(line, ':');
+            if (!colon) continue;
+            *colon = 0;
+            const char *val = colon + 1;
+            while (*val == ' ') val++;
+            if (location && !strcasecmp(line, "location")) snprintf(location, loc_n, "%s", val);
+            if (r->on_header) r->on_header(line, val, r->ctx);
         }
         if (status == -4) break;
-        if (n && !sink(p, n, ctx)) break;
+        if (in_body && (status < 200 || status > 299)) break; /* redirect or error: no body wanted */
+        if (n && !r->sink(p, n, r->ctx)) break;
     }
     close(fd);
     return status;
+}
+
+int kg_http_request(const kg_http_req_t *r)
+{
+    char url[256], loc[256];
+    snprintf(url, sizeof url, "%s", r->url);
+    for (int hop = 0; hop < 4; hop++) {
+        kg_url_t u;
+        if (!kg_url_parse(url, &u)) return hop ? -5 : -6;
+        loc[0] = 0;
+        int st = http_once(r, &u, loc, sizeof loc);
+        if ((st == 301 || st == 302 || st == 303 || st == 307 || st == 308) && loc[0]) {
+            if (loc[0] == '/') snprintf(url, sizeof url, "http://%s:%u%s", u.host, u.port, loc); /* relative */
+            else snprintf(url, sizeof url, "%s", loc);
+            continue;
+        }
+        return st;
+    }
+    return -5;
+}
+
+int kg_http_get(const char *host, const char *path, kg_http_sink_t sink, void *ctx, uint32_t timeout_ms,
+                uint32_t *ttfb_us, volatile bool *cancel)
+{
+    char url[256];
+    snprintf(url, sizeof url, "http://%s%s", host, path);
+    kg_http_req_t r = {.url = url, .sink = sink, .ctx = ctx, .timeout_ms = timeout_ms, .ttfb_us = ttfb_us, .cancel = cancel};
+    return kg_http_request(&r);
 }
 
 bool kg_json_str(const char *json, const char *key, char *out, size_t n)
