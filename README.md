@@ -1,129 +1,129 @@
 # Kronograf
 
-**Firmware de montre pour la LilyGO T-Watch 2020**, écrit de zéro : un cadran de chronographe d'aviation, des afficheurs 7 segments façon « circuits temporels », la météo et les bus de Montréal, et les notifications de l'iPhone. ESP32, LVGL 8.3 et un simulateur macOS qui compile exactement la même interface.
+**A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, Montréal weather and real-time bus departures, and iPhone notifications. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
 
-![Kronograf : cadrans, lanceur, météo, notifications, minuteur, alarmes](docs/screens/kronograf-planche.png)
+![Kronograf: watch faces, launcher, weather, notifications, timer, alarms](docs/screens/kronograf-overview.png)
 
-> *English summary — Kronograf is a from-scratch firmware for the LilyGO T-Watch 2020 (ESP32, LVGL 8.3, PlatformIO/Arduino): an aviation chronograph face, a retro 7-segment "time circuits" face, a night face, stopwatch, timer, alarms, step counter, Open-Meteo weather, real-time Montréal STM bus departures (GTFS-RT parsed as a stream), and iPhone notifications over BLE (ANCS, passkey pairing). The UI is French. A macOS SDL2 simulator builds the very same UI code. Design notes and post-mortems live in `DECISIONS.md` and `BLOCKERS.md` (French).*
-
-## Ce que fait la montre
+## What the watch does
 
 | | |
 |---|---|
-| **Cadrans** | *Chronographe aviateur* (aiguilles lissées, compteurs batterie / minutes / pas, guichet date, complication météo, pastille de notifications) · *Circuits temporels* (trois rangées 7 segments : prochaine alarme, présent, dernière synchro) · *Nuit* (heure seule, rouge sombre, rétroéclairage réduit). Glissé horizontal entre cadrans. |
-| **Apps** | Chronomètre, minuteur, alarmes, pas sur 7 jours, météo + bus, réglages — un lanceur 2 × 3 dessiné comme des sous-cadrans. |
-| **Météo** | [Open-Meteo](https://open-meteo.com) (sans clé) : conditions, ressenti, 6 heures à venir, pictogrammes vectoriels ; âge du relevé ou « hors ligne ». |
-| **Bus STM** | Passages en temps réel aux arrêts choisis (jusqu'à 3), depuis le flux GTFS-RT de la STM (~1 Mo, lu en flux sur la montre, certificat épinglé). Clé API facultative. |
-| **iPhone** | Notifications via ANCS (Bluetooth basse consommation) : carte à l'arrivée avec vibration, liste, « Effacer » ou « Refuser » renvoyés à l'iPhone. Appairage protégé par code à 6 chiffres. |
-| **Heure** | NTP à la demande (Wi-Fi allumé quelques secondes puis coupé), RTC PCF8563 en secours. |
-| **Énergie** | Sommeil léger écran éteint, réveil au bouton, poignet levé ou double tape (BMA423), échéances d'alarme et de minuteur respectées en veille. |
+| **Faces** | *Aviator chronograph* (smooth hands, battery / minutes / steps sub-dials, date window, weather complication, notification badge) · *Time circuits* (three 7-segment rows: next alarm, present time, last sync) · *Night* (time only, dark red, dimmed backlight). Swipe sideways between faces. |
+| **Apps** | Stopwatch, timer, alarms, 7-day step history, weather + buses, settings — a 2 × 3 launcher drawn like a set of sub-dials. |
+| **Weather** | [Open-Meteo](https://open-meteo.com) (no key needed): conditions, feels-like, the next 6 hours, vector pictograms; age of the reading or "offline". |
+| **STM buses** | Real-time departures at up to 3 chosen stops, from the STM GTFS-realtime feed (~1 MB, parsed as a stream on the watch, pinned certificate). Optional API key. |
+| **iPhone** | Notifications over ANCS (Bluetooth Low Energy): a card with vibration on arrival, a list, and "Clear" or "Decline" sent back to the iPhone. Pairing protected by a 6-digit passkey. |
+| **Time** | On-demand NTP (Wi-Fi on for a few seconds, then off), PCF8563 RTC as a fallback. |
+| **Power** | Light sleep with the screen off; wake on button, wrist raise or double tap (BMA423); alarms and timers fire on time while asleep. |
 
-Tout le texte est en français (accents compris) avec des polices sous licence OFL. Le matériel absent d'une révision (GPS, carte SD…) est détecté au démarrage et n'apparaît pas dans l'interface.
+Fonts are OFL-licensed and keep their accented glyphs, so notifications in any Latin-1 language display correctly. Hardware missing from a board revision (GPS, SD card…) is detected at boot and never shows up in the interface.
 
-## Matériel
+## Hardware
 
-LilyGO **T-Watch 2020 V1** (ESP32-D0WDQ6, 16 Mo de flash, 4 Mo de PSRAM, écran ST7789 240 × 240, AXP202, BMA423, PCF8563, FT6336, vibreur, haut-parleur MAX98357A, infrarouge). Des environnements V2 et V3 existent dans `platformio.ini`, mais seule la V1 a été testée.
+LilyGO **T-Watch 2020 V1** (ESP32-D0WDQ6, 16 MB flash, 4 MB PSRAM, 240 × 240 ST7789 display, AXP202, BMA423, PCF8563, FT6336, vibration motor, MAX98357A speaker, infrared). V2 and V3 environments exist in `platformio.ini`, but only the V1 has been tested.
 
-## Démarrage rapide
+## Getting started
 
 ```sh
 brew install platformio sdl2 cmake
-git clone --recurse-submodules <url-du-dépôt> kronograf && cd kronograf
-cp include/secrets.example.h include/secrets.h   # facultatif : Wi-Fi, clé STM, mot de passe OTA
+git clone --recurse-submodules https://github.com/storagebits/kronograf.git && cd kronograf
+cp include/secrets.example.h include/secrets.h   # optional: Wi-Fi, STM key, OTA password
 ```
 
-### Simulateur (macOS)
+### Simulator (macOS)
 
 ```sh
 cmake -S sim -B sim/build -DCMAKE_BUILD_TYPE=Release && cmake --build sim/build -j8
-sim/build/kronograf_sim                                       # fenêtre ×3, la souris fait le doigt
-KG_TIME=10:09:30 sim/build/kronograf_sim --shot capture.png   # capture PNG sans fenêtre
+sim/build/kronograf_sim                                       # ×3 window, the mouse is your finger
+KG_TIME=10:09:30 sim/build/kronograf_sim --shot shot.png      # headless PNG screenshot
 ```
 
-La HAL simulée se pilote par variables d'environnement : `KG_TIME`, `KG_FACE`, `KG_APP` (`chrono`, `notifs`…), `KG_BATT`, `KG_STEPS`, `KG_REV`, `KG_WX_CODE`, `KG_WX_TEMP`, `KG_BUS_STOPS`, `KG_BLE`, `KG_NOTIF_CAT`, `KG_ALERT`…
+The simulated HAL is driven by environment variables: `KG_TIME`, `KG_FACE`, `KG_APP` (`chrono`, `weather`, `notifs`…), `KG_BATT`, `KG_STEPS`, `KG_REV`, `KG_WX_CODE`, `KG_WX_TEMP`, `KG_BUS_STOPS`, `KG_BLE`, `KG_NOTIF_CAT`, `KG_ALERT`…
 
-### Montre
+### Watch
 
 ```sh
-# Avant toute chose : sauvegarder la flash d'origine (16 Mo, quelques minutes)
+# First of all: back up the original flash (16 MB, a few minutes)
 tools/backup_flash.sh
 
 pio run -e twatch-v1 -t upload --upload-port /dev/cu.usbserial-XXXX
 ```
 
-Utiliser `/dev/cu.usbserial-*` plutôt que `cu.SLAB_USBtoUART`.
+Use `/dev/cu.usbserial-*` rather than `cu.SLAB_USBtoUART`.
 
-**Mode atelier.** Montre sur USB et Wi-Fi configuré : la montre reste connectée, accepte les mises à jour OTA et ouvre une console TCP. Débranchée, le Wi-Fi est coupé.
+**Workshop mode.** With the watch on USB and Wi-Fi configured, it stays connected, accepts OTA updates and opens a TCP console. Unplugged, Wi-Fi is off.
 
 ```sh
-pio run -e twatch-v1-ota -t upload        # OTA vers kronograf.local
-tools/kg.py status                        # console : TCP si la montre est joignable, sinon série
+pio run -e twatch-v1-ota -t upload        # OTA to kronograf.local
+tools/kg.py status                        # console: TCP when the watch is reachable, serial otherwise
 ```
 
-### Secrets et configuration
+### Secrets and configuration
 
-`include/secrets.h` est ignoré par git ; `include/secrets.example.h` en donne le modèle. Une valeur vide désactive proprement la fonction correspondante.
+`include/secrets.h` is ignored by git; `include/secrets.example.h` is the template. An empty value cleanly disables the matching feature.
 
-| Clé | Rôle |
+| Key | Purpose |
 |---|---|
-| `KG_WIFI_SSID`, `KG_WIFI_PASS` | Réseau par défaut (on peut aussi le choisir sur la montre : Réglages → Wi-Fi) |
-| `KG_STM_API_KEY` | Clé du [portail développeurs STM](https://portail.developpeurs.stm.info) pour les bus |
-| `KG_OTA_PASS` | Mot de passe des mises à jour OTA (conseillé) |
+| `KG_WIFI_SSID`, `KG_WIFI_PASS` | Default network (it can also be picked on the watch: Settings → Wi-Fi) |
+| `KG_STM_API_KEY` | Key from the [STM developer portal](https://www.stm.info/en/about/developers) for bus departures |
+| `KG_OTA_PASS` | Password for OTA updates (recommended) |
 
-Les arrêts de bus se saisissent sur la montre (Réglages → Bus STM). La position météo est dans `src/data/kg_weather.h` (Montréal par défaut).
+Bus stops are entered on the watch (Settings → STM buses). The weather location lives in `src/data/kg_weather.h` (downtown Montréal by default).
 
-**Appairer un iPhone.** iOS ne liste pas un accessoire BLE générique dans Réglages → Bluetooth. Au premier contact, ouvrez une app comme *nRF Connect* et touchez « Connect » à côté de « Kronograf », puis saisissez le code affiché par la montre. Ensuite, l'iPhone se reconnecte tout seul.
+**Pairing an iPhone.** iOS does not list generic BLE accessories in Settings → Bluetooth. For the first connection, open an app such as *nRF Connect*, tap "Connect" next to "Kronograf", then type the code shown on the watch. From then on the iPhone reconnects by itself.
 
-## Console de diagnostic
+## Diagnostic console
 
-`tools/kg.py <commande>`, par le port série ou par TCP en mode atelier :
+`tools/kg.py <command>`, over the serial port or over TCP in workshop mode:
 
 ```
-status        mémoire, FPS, batterie, cause du dernier redémarrage
-screenshot f  capture LVGL → PNG          lcdtest      mire R | V | B hors LVGL
-battlog       journal d'autonomie          conso <min>  courant mesuré sur USB, batterie simulée
-meteo [maj]   bus [maj | arrets <codes>]   ble [on | off | oublier]
-sleep | wake | bl <n> | timeout <s> | face <n> | app <nom> | timer <s> | coredump | reboot
+status        memory, FPS, battery, cause of the last reboot
+screenshot f  LVGL capture → PNG              lcdtest       R | G | B test pattern outside LVGL
+battlog       battery-life log                power <min>   current measured on USB, simulated battery
+weather [refresh]   bus [refresh | stops <codes>]   ble [on | off | forget]
+sleep | wake | bl <n> | timeout <s> | face <n> | app <name> | timer <s> | coredump | reboot
 ```
 
 ## Architecture
 
 ```
-src/ui/          interface LVGL, identique montre / simulateur (cadrans, apps, thème, polices)
-src/data/        code C pur et testé sur l'hôte : Open-Meteo, GTFS-RT (protobuf en flux), ANCS
-src/hal/hal.h    seule interface matérielle vue par l'UI
-src/hal/device/  T-Watch : écran (esp_lcd, DMA), AXP202, BMA423, réseau, BLE, garde-fous
-src/hal/sim/     implémentation simulée
-sim/             harnais SDL2 et captures PNG
-tests/           tests des analyseurs (cc -I src tests/test_data.c src/data/kg_*.c)
-tools/           sauvegarde et flash par blocs, console, polices, planches de captures
+src/ui/          LVGL interface, identical on watch and simulator (faces, apps, theme, fonts)
+src/data/        plain C, host-tested: Open-Meteo, GTFS-RT (streamed protobuf), ANCS
+src/hal/hal.h    the only hardware interface the UI sees
+src/hal/device/  T-Watch: display (esp_lcd, DMA), AXP202, BMA423, network, BLE, safeguards
+src/hal/sim/     simulated implementation
+sim/             SDL2 harness and PNG screenshots
+tests/           parser tests (cc -I src tests/test_data.c src/data/kg_*.c)
+tools/           backup and block flashing, console, fonts, contact sheets
 ```
 
-Quelques choix structurants, détaillés dans [`DECISIONS.md`](DECISIONS.md) :
+A few structural choices, detailed in [`DECISIONS.md`](DECISIONS.md):
 
-- **Une UI, deux cibles.** L'interface ne connaît que `hal.h` ; le simulateur compile les mêmes fichiers. Toutes les captures du dépôt viennent de l'un ou de l'autre.
-- **Aucun réglage de la tension du cœur ESP32.** Contrairement à certains firmwares, Kronograf ne touche jamais à DCDC3 de l'AXP202 et ne coupe jamais l'alimentation de l'ESP32.
-- **Réseau par travaux.** Une tâche de fond enchaîne synchro NTP, météo et bus sur une seule connexion, puis coupe le Wi-Fi.
-- **Mémoire.** Le tas LVGL et les gros tampons TLS sont en PSRAM, ce qui garde plus de 30 % de RAM interne libre avec BLE, Wi-Fi et HTTPS actifs.
-- **Garde-fous.** Le chien de garde RTC fonctionne avec des « miettes de pain » en mémoire RTC, avec en plus des coredumps en flash et un mode sans échec : après trois plantages précoces, le BLE n'est plus démarré et l'OTA reste joignable.
+- **One UI, two targets.** The interface only knows `hal.h`; the simulator compiles the same files. Every screenshot in the repository comes from one or the other.
+- **The ESP32 core voltage is never touched.** Unlike some firmwares, Kronograf never adjusts the AXP202's DCDC3 and never cuts the ESP32's power rail.
+- **Network jobs.** A background task chains NTP sync, weather and buses over a single connection, then turns Wi-Fi off.
+- **Memory.** The LVGL heap and the large TLS buffers live in PSRAM, keeping more than 30 % of internal RAM free with BLE, Wi-Fi and HTTPS all active.
+- **Safeguards.** An RTC watchdog with "breadcrumbs" in RTC memory, coredumps in flash, and a safe mode: after three early crashes, BLE is no longer started and OTA stays reachable.
 
-## État du projet
+Hardware issues met along the way, and how they were worked around, are logged in [`BLOCKERS.md`](BLOCKERS.md).
 
-Le développement a avancé par tranches, chacune flashée et vérifiée sur la montre.
+## Project status
 
-- ✅ **0–3** : diagnostic matériel, cadrans, veille et réveils, lanceur, chronomètre, minuteur, alarmes, pas, réglages, sons, vibreur.
-- ✅ **4** : météo et bus STM.
-- ✅ **5** : notifications iPhone.
-- 🔜 **6** : télécommande infrarouge.
-- 🔜 **7** : finitions et campagne d'autonomie.
+Development went in stages, each one flashed and verified on the watch.
 
-**Limites connues.** Cette carte n'a pas de quartz 32 kHz, donc le sommeil léger est impossible tant que le BLE est actif : l'autonomie avec notifications est en cours de mesure (D41). Le connecteur micro-USB de l'exemplaire de développement est capricieux (B2), d'où l'OTA et le flash par blocs.
+- ✅ **0–3**: hardware diagnostics, faces, sleep and wake-ups, launcher, stopwatch, timer, alarms, steps, settings, sounds, vibration.
+- ✅ **4**: weather and STM buses.
+- ✅ **5**: iPhone notifications.
+- 🔜 **6**: infrared remote.
+- 🔜 **7**: polish and a battery-life campaign.
 
-## Licence et remerciements
+**Known limitations.** This board has no 32 kHz crystal, so light sleep is impossible while BLE is active: battery life with notifications is being measured (D41). The development unit's micro-USB connector is unreliable (B2), hence OTA updates and block flashing.
 
-Code de Kronograf sous [licence MIT](LICENSE). Dépendances et ressources :
+## Licence and credits
 
-- [LVGL](https://lvgl.io) 8.3 (MIT), [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) (Apache 2.0), [XPowersLib](https://github.com/lewisxhe/XPowersLib) et [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT), [stb_image_write](https://github.com/nothings/stb) (domaine public / MIT).
-- Polices [Barlow Condensed](https://fonts.google.com/specimen/Barlow+Condensed) et [Allerta Stencil](https://fonts.google.com/specimen/Allerta+Stencil), sous licence SIL Open Font License (`assets/fonts/OFL-*.txt`).
-- [My-TTGO-Watch](https://github.com/sharandac/My-TTGO-Watch) et la bibliothèque LilyGO ont servi de référence pour le brochage et les séquences d'initialisation, sans reprise de code (voir `docs/AUDIT.md`).
-- Météo : [Open-Meteo](https://open-meteo.com) (CC BY 4.0). Bus : données ouvertes de la [STM](https://www.stm.info/fr/a-propos/developpeurs).
+Kronograf's code is released under the [MIT licence](LICENSE). Dependencies and assets:
+
+- [LVGL](https://lvgl.io) 8.3 (MIT), [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) (Apache 2.0), [XPowersLib](https://github.com/lewisxhe/XPowersLib) and [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT), [stb_image_write](https://github.com/nothings/stb) (public domain / MIT).
+- [Barlow Condensed](https://fonts.google.com/specimen/Barlow+Condensed) and [Allerta Stencil](https://fonts.google.com/specimen/Allerta+Stencil) fonts, under the SIL Open Font License (`assets/fonts/OFL-*.txt`).
+- [My-TTGO-Watch](https://github.com/sharandac/My-TTGO-Watch) and the LilyGO library served as references for the pinout and init sequences, without reusing their code (see `docs/AUDIT.md`).
+- Weather: [Open-Meteo](https://open-meteo.com) (CC BY 4.0). Buses: [STM](https://www.stm.info/en/about/developers) open data.

@@ -1,40 +1,42 @@
-# Blocages
+# Blockers
 
-## B1 — Montre non détectée en USB (résolu, 2026-10-12)
+## B1 — Watch not detected over USB (solved, 2026-10-12)
 
-**Symptôme :** aucun périphérique série USB. `system_profiler SPUSBDataType` ne liste qu'un hub, un récepteur Logitech et un adaptateur DisplayPort. Aucun `/dev/cu.usbserial-*`, `cu.wchusbserial*` ni `cu.SLAB_USBtoUART*`.
+**Symptom:** no USB serial device. `system_profiler SPUSBDataType` only lists a hub, a Logitech receiver and a DisplayPort adapter. No `/dev/cu.usbserial-*`, `cu.wchusbserial*` or `cu.SLAB_USBtoUART*`.
 
-**Hypothèses testées :**
-1. Pilote absent → non : `com.silabs.cp210x` 6.0.2 est chargé ; les CH9102 sont gérés nativement par macOS récent.
-2. Montre éteinte → peu probable comme seule cause : le pont USB-série est alimenté par le bus et s'énumère même montre éteinte.
-3. Restent : câble « charge seule », port / hub défaillant, connecteur micro-USB de la montre.
+**Hypotheses tested:**
+1. Missing driver → no: `com.silabs.cp210x` 6.0.2 is loaded; CH9102 bridges are handled natively by recent macOS.
+2. Watch switched off → unlikely as the only cause: the USB-serial bridge is bus-powered and enumerates even with the watch off.
+3. Remaining: a charge-only cable, a faulty port / hub, or the watch's micro-USB connector.
 
-**Conséquence (règle 2) :** sauvegarde de la flash impossible → **aucune écriture sur la montre**. Le travail continue en simulateur (Tranche 0 : audit, chaîne de compilation, simulateur, captures) ; la vérification matérielle reprendra dès que le port apparaîtra.
+**Consequence (rule 2):** no flash backup possible → **no writes to the watch**. Work continued in the simulator (stage 0: audit, toolchain, simulator, screenshots); hardware verification would resume as soon as the port showed up.
 
-**Piste suivante :** câble USB data connu bon, branché directement sur le Mac (sans hub) ; vérifier avec `ls /dev/cu.*`.
+**Next lead:** a known-good USB data cable, plugged straight into the Mac (no hub); check with `ls /dev/cu.*`.
 
-**Mise à jour 2026-10-12 :** après changement de câble, le port est apparu (`/dev/cu.usbserial-XXXX`, CP210x). `chip_id`/`flash_id` ont réussi : **ESP32-D0WDQ6 rev v1.0**, 40 MHz, flash Winbond (ef/4018) **16 Mo**. Puis le port a **disparu** pendant le `read_flash` à 921600 bauds et n'est pas revenu → connexion intermittente (fiche micro-USB mal enfoncée ou câble fragile). Aucune écriture effectuée ; aucune sauvegarde partielle conservée.
+**Update 2026-10-12:** after changing the cable the port appeared (`/dev/cu.usbserial-XXXX`, CP210x). `chip_id`/`flash_id` succeeded: **ESP32-D0WDQ6 rev v1.0**, 40 MHz, Winbond flash (ef/4018) **16 MB**. Then the port **vanished** during `read_flash` at 921,600 baud and did not come back → intermittent connection (micro-USB plug not fully seated, or a fragile cable). Nothing written; no partial backup kept.
 
-**Résolu :** fiche réenfoncée ; sauvegarde complète réussie à 230 400 bauds (cf. DECISIONS D8).
+**Solved:** plug pushed back in; full backup succeeded at 230,400 baud (see DECISIONS D8).
 
-## B2 — Décrochages USB récurrents (ouvert, 2026-10-12)
+## B2 — Recurring USB dropouts (open, 2026-10-12)
 
-**Symptôme :** pendant un téléversement, le CP210x disparaît du bus USB ; les nœuds `/dev/cu.usbserial-XXXX` et `cu.SLAB_USBtoUART` restent mais toute ouverture échoue (`termios.error: (22, 'Invalid argument')`).
-**Cause probable :** même faux contact que B1 (fiche micro-USB de la montre).
-**Contournement :** travail sans montre (simulateur), flash groupé au retour du port ; l'utilisateur réenfonce la fiche. Piste durable : câble court, montre posée à plat, ou OTA Wi-Fi (Tranche 4) pour ne plus dépendre du câble.
+**Symptom:** during an upload, the CP210x disappears from the USB bus; the `/dev/cu.usbserial-XXXX` and `cu.SLAB_USBtoUART` nodes remain but every open fails (`termios.error: (22, 'Invalid argument')`).
+**Probable cause:** the same loose contact as B1 (the watch's micro-USB plug).
+**Workaround:** work without the watch (simulator), batch flashing when the port comes back; the user re-seats the plug. Lasting options: a short cable, the watch lying flat, or Wi-Fi OTA (stage 4) to stop depending on the cable.
 
-**Mise à jour (2026-10-12) :** les décrochages surviennent aussi **pendant un flash**, ESP32 dans son chargeur ROM (notre firmware ne tourne pas) : c'est donc matériel (connecteur micro-USB / câble), pas logiciel. Ils ne redémarrent pas la montre (vu : décrochage à 10:56:49, montre restée éveillée, `uptime` continu). Contournements : flash par blocs de 64 Ko vérifiés et repris (`tools/flash_chunks.py`), OTA en mode atelier dès que possible, console TCP.
+**Update (2026-10-12):** dropouts also happen **during a flash**, with the ESP32 in its ROM loader (our firmware is not running): so the cause is hardware (micro-USB connector / cable), not software. They do not reboot the watch (seen: dropout at 10:56:49, watch stayed awake, `uptime` continuous). Workarounds: flashing in verified, resumable 64 KB blocks (`tools/flash_chunks.py`), OTA in workshop mode whenever possible, TCP console.
 
-## B3 — Gel au réveil d'une échéance, montre figée jusqu'à extinction forcée (2026-10-12)
+**Update (2026-10-12, evening):** with the watch still plugged in, USB stopped delivering power altogether (no charging indicator, the CP210x no longer enumerated). The watch then behaves as if on battery — workshop Wi-Fi switches off and it vanishes from the network — which first looked like a firmware hang. Re-seating the cable did not help; the cable / connector pair is the suspect.
 
-**Symptôme :** pendant un test de minuteur (écran éteint, USB instable), la montre ne répondait plus ni en Wi-Fi ni en série, bouton sans effet ; extinction forcée nécessaire. Aucun coredump, aucun reset de chien de garde (`reset=1` après rallumage).
-**Hypothèses et correctifs appliqués :**
-1. `gpio_wakeup_disable()` après le sommeil léger remettait les broches AXP202/BMA423 en « pas d'interruption » : après un premier sommeil léger, bouton et poignet ne réveillaient plus rien tant que la montre restait éveillée. **Corrigé** (restauration NEGEDGE/POSEDGE).
-2. Micro-coupures USB (connecteur) : bascule Wi-Fi atelier on/off en boucle et sommeil léger entre deux. **Corrigé** (anti-rebond 3 s, `power_usb_stable()`).
-3. L'échéance n'était programmée que par l'UI (écran allumé). **Corrigé** (la gestion d'énergie interroge le modèle).
-**Filet de sécurité tenté :** chien de garde RTC (90 s) + miettes de pain en mémoire RTC. Testé par un sommeil léger sans source de réveil : **la montre n'a pas redémarré**, même après avoir effacé `RTC_CNTL_WDT_PAUSE_IN_SLP` (le code de sommeil d'ESP-IDF semble reprendre la main sur le RWDT, ou le redémarrage reste bloqué au boot — non vérifié). Le RWDT est conservé pour les gels éveillés ; le scénario testé (sommeil sans réveil) ne peut pas se produire dans Kronograf, qui programme toujours un réveil minuté ≤ 60 s.
-**Piste suivante :** si un gel se reproduit, lire les miettes de pain (`status` → ligne « garde ») ; envisager le passage à ESP-IDF pur pour maîtriser la configuration du RWDT en sommeil.
+## B3 — Hang after a scheduled wake-up, watch frozen until a forced power-off (2026-10-12)
 
-**Mise à jour (2026-10-12, 11 h) — cause principale trouvée et corrigée.** Sur batterie, la montre se bloquait dès le premier sommeil léger (écran éteint ~20 s après usage) : noir complet, bouton sans effet, extinction forcée nécessaire. Ce chemin n'avait jamais tourné sur la montre (l'USB empêche le sommeil léger). Cause retenue : le RWDT armé par `guard.cpp` (action `RESET_SYSTEM`, `WDT_PAUSE_IN_SLP` effacé) restait actif pendant `esp_light_sleep_start()`. **Correctif** : RWDT suspendu autour du sommeil léger (`guard_suspend`), réarmé au réveil ; action `RESET_RTC` ; bit `PAUSE_IN_SLP` laissé à sa valeur par défaut. **Validé** sur montre en mode `battsim 1` (comportement batterie, journal série) : cycles sommeil léger → réveil minuté répétés sans blocage (`event lsleep in/out`).
+**Symptom:** during a timer test (screen off, unstable USB), the watch stopped answering over Wi-Fi and serial, the button had no effect; a forced power-off was needed. No coredump, no watchdog reset (`reset=1` after powering back on).
+**Hypotheses and fixes applied:**
+1. `gpio_wakeup_disable()` after light sleep reset the AXP202/BMA423 pins to "no interrupt": after a first light sleep, the button and the wrist woke nothing while the watch stayed awake. **Fixed** (NEGEDGE/POSEDGE restored).
+2. USB micro-dropouts (connector): workshop Wi-Fi toggling on/off in a loop, with light sleep in between. **Fixed** (3 s debounce, `power_usb_stable()`).
+3. The deadline was only scheduled by the UI (screen on). **Fixed** (power management queries the model).
+**Safety net tried:** RTC watchdog (90 s) + breadcrumbs in RTC memory. Tested with a light sleep that has no wake-up source: **the watch did not reboot**, even after clearing `RTC_CNTL_WDT_PAUSE_IN_SLP` (ESP-IDF's sleep code seems to take the RWDT over, or the reboot stalls at boot — not verified). The RWDT is kept for hangs while awake; the tested scenario (sleep without wake-up) cannot happen in Kronograf, which always schedules a timed wake-up ≤ 60 s.
+**Next lead:** if a hang happens again, read the breadcrumbs (`status` → "guard" line); consider moving to pure ESP-IDF to control the RWDT configuration during sleep.
 
-**Mise à jour (11 h 20) — second défaut, corrigé.** Une fois le RWDT écarté, les réveils minutés fonctionnaient mais **un appui sur le bouton figeait la montre** (dernière trace : `lsleep in`, jamais de `lsleep out`). Cause : `gpio_wakeup_enable()` passe la broche en interruption *de niveau* alors que l'ISR Arduino reste active ; au réveil la ligne INT de l'AXP202 reste basse jusqu'à l'acquittement I²C, donc l'interruption se redéclenche sans fin sur le cœur 1 (tempête), qui ne revient jamais au code. **Correctif** : `gpio_intr_disable()` sur les deux broches avant le sommeil, types front + `gpio_intr_enable()` après. Validé par l'utilisateur (montre en `battsim 1`) : réveils au bouton répétés sans blocage. Reste à confirmer sur vraie batterie et pour le réveil poignet/double tape (même chemin).
+**Update (2026-10-12, 11:00) — main cause found and fixed.** On battery, the watch froze at the very first light sleep (screen off ~20 s after use): fully black, button ineffective, forced power-off needed. That code path had never run on the watch (USB prevents light sleep). Retained cause: the RWDT armed by `guard.cpp` (`RESET_SYSTEM` action, `WDT_PAUSE_IN_SLP` cleared) stayed active during `esp_light_sleep_start()`. **Fix**: RWDT suspended around light sleep (`guard_suspend`) and re-armed on wake-up; `RESET_RTC` action; `PAUSE_IN_SLP` left at its default. **Validated** on the watch in `battsim 1` mode (battery behaviour, serial log): repeated light sleep → timed wake-up cycles without a hang (`event lsleep in/out`).
+
+**Update (11:20) — second defect, fixed.** With the RWDT out of the way, timed wake-ups worked but **a button press froze the watch** (last trace: `lsleep in`, never `lsleep out`). Cause: `gpio_wakeup_enable()` switches the pin to a *level* interrupt while the Arduino ISR stays active; on wake-up the AXP202 INT line stays low until the I²C acknowledgement, so the interrupt fires endlessly on core 1 (an interrupt storm) and never returns to the code. **Fix**: `gpio_intr_disable()` on both pins before sleeping, edge types + `gpio_intr_enable()` afterwards. Validated by the user (watch in `battsim 1`), then on a real battery: repeated button wake-ups without a hang. Wrist-raise and double-tap wake-ups use the same path; the user reports they work, if somewhat erratically (BMA423 thresholds to tune).

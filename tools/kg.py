@@ -2,7 +2,7 @@
 """Mac tool for the Kronograf console.
 
   tools/kg.py status                     sends a command and prints the reply
-  tools/kg.py screenshot docs/screens/device/t0-diag.png
+  tools/kg.py screenshot shot.png
   tools/kg.py --port /dev/cu.usbserial-XXXX status
   tools/kg.py --host kronograf.local status    workshop mode (Wi-Fi)
 
