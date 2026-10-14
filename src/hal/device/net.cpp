@@ -52,12 +52,20 @@ static const char *volatile s_status = "Idle";
 
 /* ------------------------------------------------------------------- jobs */
 
-enum : uint32_t { JOB_NTP = 1, JOB_WX = 2, JOB_BUS = 4 };
+enum : uint32_t { JOB_NTP = 1, JOB_WX = 2, JOB_BUS = 4, JOB_LINK = 8 /* just connect (toolbox lease) */ };
 static uint32_t s_jobs;
 static TaskHandle_t s_task;
 static bool s_task_running;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static bool s_scanning;
+
+/* Toolbox lease (hal_net_hold): Wi-Fi stays on until it lapses; s_kept marks a connection
+ * kept up only for the lease, switched off by net_workshop_loop() once it has lapsed. */
+static volatile uint32_t s_hold_until;
+static bool s_kept;
+static constexpr uint32_t HOLD_MS = 20000;
+
+bool net_hold_active(void) { return s_hold_until && (int32_t)(s_hold_until - millis()) > 0; }
 
 static constexpr uint32_t WIFI_TIMEOUT_MS = 15000;
 static constexpr uint32_t NTP_TIMEOUT_MS = 10000;
@@ -244,8 +252,10 @@ static void net_task(void *)
         if (jobs & JOB_BUS) s_bus_busy = false;
     }
     /* On USB, workshop mode takes the connection over as is: no disconnect that would drop a
-     * freshly opened TCP console. */
-    if (!(KG_WORKSHOP && power_usb_stable() && WiFi.status() == WL_CONNECTED)) {
+     * freshly opened TCP console. The toolbox lease keeps it too. */
+    if (net_hold_active()) {
+        s_kept = true;
+    } else if (!(KG_WORKSHOP && power_usb_stable() && WiFi.status() == WL_CONNECTED)) {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
     }
@@ -434,6 +444,32 @@ static void workshop_stop(void)
     if (s_ota_ready) ArduinoOTA.end();
     s_ota_ready = false;
     console_tcp_enable(false);
+    if (net_hold_active()) { /* the toolbox is open: its lease owns the connection now */
+        s_kept = true;
+        return;
+    }
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    s_status = "Idle";
+}
+
+void hal_net_hold(void)
+{
+    if (!have_wifi()) return;
+    s_hold_until = (millis() + HOLD_MS) | 1;
+    if (WiFi.status() == WL_CONNECTED || s_task || s_scanning) return;
+    net_request(JOB_LINK);
+}
+
+void hal_net_release(void) { s_hold_until = 0; }
+
+/* Lease lapsed (toolbox closed, screen off): stop the tools, then Wi-Fi. */
+static void hold_check(void)
+{
+    if (net_hold_active()) return;
+    nettools_cancel();
+    if (!s_kept || s_task || s_scanning || s_workshop) return;
+    s_kept = false;
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     s_status = "Idle";
@@ -441,6 +477,7 @@ static void workshop_stop(void)
 
 void net_workshop_loop(void)
 {
+    hold_check();
     if (!KG_WORKSHOP || !have_wifi() || s_task || s_scanning) return; /* network jobs and scans come first */
     bool usb = power_usb_stable();
     if (usb && !s_workshop) {
@@ -474,13 +511,17 @@ void net_workshop_loop(void)
 
 /* ------------------------------------------------------------ Wi-Fi setup */
 
-void hal_wifi_scan_start(void)
+bool hal_wifi_scan_start(void)
 {
-    if (s_task) return;
+    if (s_task) return false; /* connecting: a scan would fail */
     s_scanning = true;
     if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
     WiFi.scanDelete();
-    WiFi.scanNetworks(true /* asynchronous */, false);
+    if (WiFi.scanNetworks(true /* asynchronous */, true /* hidden too */) == WIFI_SCAN_FAILED) {
+        s_scanning = false;
+        return false;
+    }
+    return true;
 }
 
 int hal_wifi_scan_count(void)
@@ -489,7 +530,8 @@ int hal_wifi_scan_count(void)
     if (n == WIFI_SCAN_RUNNING) return -1;
     if (s_scanning) {
         s_scanning = false;
-        if (!s_workshop) WiFi.mode(WIFI_OFF); /* never leave Wi-Fi on after a scan */
+        /* Never leave Wi-Fi on after a scan, unless something else owns it. */
+        if (!s_workshop && !net_hold_active() && WiFi.status() != WL_CONNECTED) WiFi.mode(WIFI_OFF);
     }
     return n < 0 ? 0 : n;
 }
@@ -499,6 +541,27 @@ bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi)
     if (i < 0 || i >= WiFi.scanComplete()) return false;
     snprintf(ssid, n, "%s", WiFi.SSID(i).c_str());
     *rssi = WiFi.RSSI(i);
+    return true;
+}
+
+bool hal_wifi_scan_ap(int i, kg_ap_t *out)
+{
+    if (i < 0 || i >= WiFi.scanComplete()) return false;
+    memset(out, 0, sizeof *out);
+    snprintf(out->ssid, sizeof out->ssid, "%s", WiFi.SSID(i).c_str());
+    const uint8_t *b = WiFi.BSSID(i);
+    if (b) memcpy(out->bssid, b, 6);
+    out->rssi = (int8_t)WiFi.RSSI(i);
+    out->channel = (uint8_t)WiFi.channel(i);
+    switch (WiFi.encryptionType(i)) {
+    case WIFI_AUTH_OPEN: out->auth = KG_AUTH_OPEN; break;
+    case WIFI_AUTH_WEP: out->auth = KG_AUTH_WEP; break;
+    case WIFI_AUTH_WPA_PSK: out->auth = KG_AUTH_WPA; break;
+    case WIFI_AUTH_WPA3_PSK:
+    case WIFI_AUTH_WPA2_WPA3_PSK: out->auth = KG_AUTH_WPA3; break;
+    case WIFI_AUTH_WPA2_ENTERPRISE: out->auth = KG_AUTH_ENTERPRISE; break;
+    default: out->auth = KG_AUTH_WPA2; break;
+    }
     return true;
 }
 

@@ -30,7 +30,12 @@ static uint32_t s_timeout_ms = 10000;
 static uint8_t s_brightness = 160;
 static uint8_t s_scale_pct = 100; /* requested by the face on screen */
 
-static uint8_t effective_brightness(void) { return (uint8_t)(s_brightness * s_scale_pct / 100 < 6 ? 6 : s_brightness * s_scale_pct / 100); }
+static bool s_boost; /* torch: full backlight */
+static uint8_t effective_brightness(void)
+{
+    if (s_boost) return 255;
+    return (uint8_t)(s_brightness * s_scale_pct / 100 < 6 ? 6 : s_brightness * s_scale_pct / 100);
+}
 static uint32_t s_wake_ms;
 static const char *s_wake_reason = "boot";
 static uint32_t s_light_sleeps, s_wakes;
@@ -175,6 +180,15 @@ void hal_steps_history(uint32_t out[7])
 }
 
 uint32_t hal_steps_today(void) { return s_bma_ok ? s_bma.getPedometerCounter() : 0; }
+
+/* ±2 g range, 12 bits: 1024 LSB per g. Axes as remapped at init (to validate on the wrist). */
+bool hal_accel(float *x, float *y, float *z)
+{
+    int16_t ax, ay, az;
+    if (!s_bma_ok || !s_bma.getAccelerometer(ax, ay, az)) return false;
+    *x = ax / 1024.0f, *y = ay / 1024.0f, *z = az / 1024.0f;
+    return true;
+}
 
 /* ------------------------------------------------------------------- init */
 
@@ -469,6 +483,12 @@ uint8_t power_brightness(void) { return s_brightness; }
 void hal_brightness_scale(uint8_t pct)
 {
     s_scale_pct = pct > 100 ? 100 : pct;
+    if (s_screen_on) hal_backlight(effective_brightness());
+}
+
+void hal_brightness_boost(bool on)
+{
+    s_boost = on;
     if (s_screen_on) hal_backlight(effective_brightness());
 }
 

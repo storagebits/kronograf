@@ -11,6 +11,9 @@
 #include <time.h>
 #include "../data/kg_ancs.h"
 #include "../data/kg_bus.h"
+#include "../data/kg_ir.h"
+#include "../data/kg_net.h"
+#include "../data/kg_tools.h"
 #include "../data/kg_weather.h"
 
 #ifdef __cplusplus
@@ -74,7 +77,7 @@ uint16_t hal_screen_timeout_get(void);
 void hal_screen_timeout_set(uint16_t seconds);
 
 /* Wi-Fi: credentials entered on the watch (NVS, take precedence over secrets.h). */
-void hal_wifi_scan_start(void);
+bool hal_wifi_scan_start(void);                      /* false if Wi-Fi is busy (retry later) */
 int hal_wifi_scan_count(void);                       /* -1: scan in progress */
 bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi);
 void hal_wifi_set_credentials(const char *ssid, const char *pass); /* triggers a sync */
@@ -135,6 +138,76 @@ int hal_notif_count(void);
 bool hal_notif_get(int i, kg_notif_t *out); /* 0 = most recent */
 uint32_t hal_notif_seq(void);    /* +1 for each new notification to announce */
 void hal_notif_dismiss(uint32_t uid); /* removes it from the watch and clears it on the iPhone */
+
+/* ------------------------------------------------------- network toolbox
+ * While the toolbox is open the UI holds a Wi-Fi lease, renewed by its timers; it lapses
+ * 20 s after the last renewal (screen off, app closed) and Wi-Fi goes back off. One tool
+ * runs at a time in the background, the UI polls a snapshot of its state. */
+void hal_net_hold(void);         /* takes or renews the lease (connects if needed) */
+void hal_net_release(void);
+
+typedef struct {
+    bool up;                     /* associated, with an IP address */
+    char ssid[33];
+    uint8_t bssid[6], mac[6];
+    int8_t rssi;
+    uint8_t channel;
+    uint32_t ip, mask, gw, dns;  /* network byte order */
+    char hostname[24];
+} kg_link_t;
+void hal_net_link(kg_link_t *out);
+
+/* Wi-Fi scan details (after hal_wifi_scan_count() >= 0). */
+typedef enum { KG_AUTH_OPEN, KG_AUTH_WEP, KG_AUTH_WPA, KG_AUTH_WPA2, KG_AUTH_WPA3, KG_AUTH_ENTERPRISE } kg_auth_t;
+typedef struct {
+    char ssid[33];
+    uint8_t bssid[6];
+    int8_t rssi;
+    uint8_t channel;
+    kg_auth_t auth;
+} kg_ap_t;
+bool hal_wifi_scan_ap(int i, kg_ap_t *out);
+
+/* Starts a tool on `target` (host name or address; ignored by LAN, speed, public IP and BLE
+ * scans). Stops the previous one. */
+void hal_tool_start(kg_tool_t tool, const char *target);
+void hal_tool_stop(void);
+void hal_tool_get(kg_tool_state_t *out);
+
+/* ---------------------------------------------------------------- sensors */
+
+/* Acceleration in g, watch frame: x towards 3 o'clock, y towards 12 o'clock, z out of the
+ * screen (lying flat face up: z ≈ +1). False without an accelerometer. */
+bool hal_accel(float *x, float *y, float *z);
+
+/* ---------------------------------------------------------------- infrared */
+
+bool hal_ir_available(void);
+/* Sends one code, repeated as the protocol requires (see kg_ir.h for the code layout). */
+void hal_ir_send(kg_ir_proto_t proto, uint32_t code);
+
+/* ---------------------------------------------------------------- system */
+
+typedef struct {
+    uint32_t uptime_s;
+    uint32_t heap_free, heap_min, heap_total;  /* internal RAM */
+    uint32_t psram_free, psram_total;
+    uint16_t cpu_mhz;
+    float fps;
+    int batt_mv, batt_pct;
+    float batt_ma;              /* > 0 charging, < 0 discharging */
+    int vbus_mv;
+    float pmu_temp;             /* AXP202 die temperature, °C */
+    bool usb, charging;
+    uint32_t wakes, light_sleeps;
+    const char *reset_reason;
+    uint32_t app_kb, app_slot_kb;
+    const char *version;
+} kg_sysinfo_t;
+void hal_sysinfo(kg_sysinfo_t *out);
+
+/* Full backlight regardless of the brightness setting (torch). */
+void hal_brightness_boost(bool on);
 
 #ifdef __cplusplus
 }

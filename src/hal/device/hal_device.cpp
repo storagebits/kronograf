@@ -124,6 +124,7 @@ void hal_device_init(void)
         s_pmu.enableVbusVoltageMeasure();
         s_pmu.enableAdcChannel(0x40 | 0x04); /* ADC_EN1: battery (b6) and VBUS (b2) current — measurements only */
         s_pmu.enableCoulomb();               /* coulomb counter: real consumption, sleep included */
+        s_pmu.enableTemperatureMeasure();    /* ADC_EN2 b7: die temperature, measurement only */
         s_pmu.setChargingLedMode(XPOWERS_CHG_LED_OFF);
     } else {
         s_inv.pmu = false;
@@ -195,6 +196,9 @@ uint32_t pmu_read_irq(void)
 
 /* Battery discharge current in mA (0 on USB): basis for battery-life estimates. */
 float pmu_discharge_ma(void) { return s_inv.pmu ? s_pmu.getBattDischargeCurrent() : 0; }
+float pmu_charge_ma(void) { return s_inv.pmu ? s_pmu.getBatteryChargeCurrent() : 0; }
+int pmu_vbus_mv(void) { return s_inv.pmu ? s_pmu.getVbusVoltage() : 0; }
+float pmu_temperature(void) { return s_inv.pmu ? s_pmu.getTemperature() : 0; }
 float pmu_vbus_ma(void) { return s_inv.pmu ? s_pmu.getVbusCurrent() : 0; }
 
 /* mAh discharged since the AXP202 powered up (coulomb counter). */

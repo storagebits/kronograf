@@ -403,3 +403,44 @@ void hal_notif_dismiss(uint32_t uid)
     uint64_t item = uid | (uint64_t)EVENT_DISMISS << 48; /* write with response: done by the task */
     xQueueSendToFront(s_uids, &item, 0);
 }
+
+/* --------------------------------------------------------- toolbox scan
+ * Active 5 s scan for the network toolbox, alongside the iPhone link (NimBLE scans and
+ * keeps its connection). Only while Bluetooth is on: starting the stack for a scan alone
+ * would tie the light-sleep rules to the toolbox. */
+void ble_tool_scan(kg_tool_state_t *st, const kg_tools_env_t *env)
+{
+    if (!s_inited) {
+        kg_tool_status(st, env, true, "Bluetooth is off (Settings)");
+        return;
+    }
+    kg_tool_status(st, env, false, "Scanning for 5 s…");
+    NimBLEScan *scan = NimBLEDevice::getScan();
+    scan->setActiveScan(true); /* scan responses carry most names */
+    scan->setInterval(100);
+    scan->setWindow(60);
+    scan->setDuplicateFilter(1);
+    NimBLEScanResults res = scan->getResults(5000, false);
+    int n = res.getCount();
+    for (int i = 0; i < n && !*env->cancel; i++) {
+        const NimBLEAdvertisedDevice *d = res.getDevice(i);
+        if (!d) continue;
+        kg_tool_row_t row = {};
+        row.v = d->getRSSI();
+        row.kind = row.v > -60 ? KG_ROW_GOOD : row.v > -80 ? KG_ROW_NORMAL : KG_ROW_DIM;
+        const char *vendor = nullptr;
+        if (d->haveManufacturerData()) {
+            std::string m = d->getManufacturerData();
+            if (m.size() >= 2) vendor = kg_ble_company((uint16_t)((uint8_t)m[0] | (uint8_t)m[1] << 8));
+        }
+        std::string name = d->getName();
+        if (!name.empty() && vendor) snprintf(row.a, sizeof row.a, "%.13s · %s", name.c_str(), vendor);
+        else if (!name.empty()) snprintf(row.a, sizeof row.a, "%s", name.c_str());
+        else if (vendor) snprintf(row.a, sizeof row.a, "%s", vendor);
+        else snprintf(row.a, sizeof row.a, "%s", d->getAddress().toString().c_str());
+        snprintf(row.b, sizeof row.b, "%d dBm", (int)row.v);
+        kg_tool_add_row(st, env, &row, true);
+    }
+    scan->clearResults();
+    kg_tool_status(st, env, false, "%d device%s · strongest first", n, n == 1 ? "" : "s");
+}

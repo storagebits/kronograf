@@ -15,13 +15,14 @@ target_compile_options(lvgl PRIVATE -w)
 
 file(GLOB_RECURSE UI_SRC ${ROOT}/src/ui/*.c)
 file(GLOB DATA_SRC ${ROOT}/src/data/*.c)
-add_executable(kronograf_sim main.c ${ROOT}/src/hal/sim/hal_sim.c ${UI_SRC} ${DATA_SRC})
+add_executable(kronograf_sim main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${UI_SRC} ${DATA_SRC})
 target_compile_definitions(kronograf_sim PRIVATE KG_ROOT="${ROOT}")
 target_include_directories(kronograf_sim PRIVATE ${ROOT}/src ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(kronograf_sim PRIVATE lvgl SDL2::SDL2)
+target_include_directories(kronograf_sim PRIVATE ${ROOT}/include)
+target_link_libraries(kronograf_sim PRIVATE lvgl SDL2::SDL2 pthread)
 if(UNIX AND NOT APPLE)
   target_link_libraries(kronograf_sim PRIVATE m)  # libm is implicit on macOS, not on Linux
 endif()
 # Our code builds warning-free (generated fonts are excluded from -Werror).
 file(GLOB UI_OWN ${ROOT}/src/ui/*.c)
-set_source_files_properties(main.c ${ROOT}/src/hal/sim/hal_sim.c ${UI_OWN} ${DATA_SRC} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
+set_source_files_properties(main.c ${ROOT}/src/hal/sim/hal_sim.c ${ROOT}/src/hal/sim/hal_sim_net.c ${UI_OWN} ${DATA_SRC} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")

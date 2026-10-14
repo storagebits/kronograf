@@ -2,6 +2,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include "../../data/kg_tools.h"
 class Print;
 
 /* America/Toronto time zone with North American DST rules. */
@@ -30,6 +31,9 @@ void pmu_clear_irq(void);
 uint32_t pmu_read_irq(void);
 float pmu_discharge_ma(void);
 float pmu_vbus_ma(void);
+float pmu_charge_ma(void);
+int pmu_vbus_mv(void);
+float pmu_temperature(void);
 float pmu_discharged_mah(void);
 void pmu_audio_power(bool on);
 
@@ -80,8 +84,17 @@ void power_measure_print(Print &out);
 void console_poll(void);
 void console_tcp_enable(bool on);
 
-/* Workshop mode: on USB, Wi-Fi + OTA + TCP console (see DECISIONS). */
+/* Workshop mode: on USB, Wi-Fi + OTA + TCP console (see DECISIONS). Also expires the
+ * toolbox's Wi-Fi lease. */
 void net_workshop_loop(void);
+bool net_hold_active(void);
+
+/* Network toolbox task (nettools.cpp). */
+void nettools_cancel(void);              /* lease lapsed: stop the running tool */
+void ble_tool_scan(kg_tool_state_t *st, const kg_tools_env_t *env); /* ble.cpp */
+
+/* Infrared transmitter (ir.cpp). */
+void ir_print(Print &out);
 
 /* BLE / iPhone notifications (ble.cpp) */
 void ble_start(void);

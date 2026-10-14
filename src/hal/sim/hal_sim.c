@@ -151,16 +151,12 @@ void hal_brightness_set(uint8_t level) { s_bl = level; }
 uint16_t hal_screen_timeout_get(void) { return s_timeout; }
 void hal_screen_timeout_set(uint16_t seconds) { s_timeout = seconds; }
 
-static int s_scan = -2;
-void hal_wifi_scan_start(void) { s_scan = 4; }
-int hal_wifi_scan_count(void) { return s_scan < 0 ? -1 : s_scan; }
 bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi)
 {
-    static const char *const names[] = {"Home", "Home-5G", "Corner Café", "BELL123"};
-    static const int levels[] = {-48, -55, -71, -83};
-    if (i < 0 || i >= 4) return false;
-    snprintf(ssid, n, "%s", names[i]);
-    *rssi = levels[i];
+    kg_ap_t ap;
+    if (!hal_wifi_scan_ap(i, &ap)) return false;
+    snprintf(ssid, n, "%s", ap.ssid);
+    *rssi = ap.rssi;
     return true;
 }
 void hal_wifi_set_credentials(const char *ssid, const char *pass)
