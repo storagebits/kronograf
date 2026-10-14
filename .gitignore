@@ -8,3 +8,4 @@ include/secrets.h
 __pycache__/
 .venv/
 build-archive/
+PROMPT-kronograf-twatch.md
