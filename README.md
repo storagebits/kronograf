@@ -5,7 +5,7 @@
 
 **A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, Montréal weather and real-time bus departures, and iPhone notifications. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
 
-![Kronograf on a wrist (AI-generated photo; the display is a real screenshot of the aviator face)](docs/screens/kronograf-wrist.jpg)
+![Kronograf on a wrist (AI-generated photo; the display is a real screenshot of the aviator face)](docs/screens/kronograf-wrist-photo.jpg)
 <sub>AI-generated photo; the display shows a real screenshot of the aviator face, inlaid with `tools/inlay_screen.py`.</sub>
 
 <p align="center">
