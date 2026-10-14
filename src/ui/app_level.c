@@ -7,6 +7,7 @@
 #include "kit.h"
 #include "theme.h"
 #include "fonts/kg_fonts.h"
+#include "kg_tick.h"
 #include "../hal/hal.h"
 #include <math.h>
 #include <stdio.h>
@@ -16,11 +17,13 @@
 #define R_OUT 92
 #define PX_PER_DEG 9.0f  /* bubble travel: 10° reaches the outer ring */
 #define BUBBLE 26
+#define AWAKE_MAX_MS (5 * 60 * 1000) /* hands-off reading, but not forever */
 
 static lv_obj_t *s_bubble, *s_x, *s_y, *s_total, *s_hint;
 static lv_timer_t *s_timer;
 static float s_fx, s_fy, s_fz = 1, s_off_x, s_off_y;
 static bool s_level, s_have;
+static uint32_t s_opened;
 
 static lv_obj_t *ring(lv_obj_t *scr, lv_coord_t r, lv_color_t c)
 {
@@ -56,7 +59,7 @@ static void angles(float *ax, float *ay)
 static void tick(lv_timer_t *t)
 {
     (void)t;
-    lv_disp_trig_activity(NULL); /* a level is read hands-off */
+    if (kg_tick_ms() - s_opened < AWAKE_MAX_MS) lv_disp_trig_activity(NULL); /* a level is read hands-off */
     float x, y, z;
     if (!hal_accel(&x, &y, &z)) {
         lv_label_set_text(s_hint, "NO ACCELEROMETER");
@@ -155,6 +158,7 @@ static void on_show(void)
     s_off_x = hal_setting_get("lvl_x", 0) / 100.0f;
     s_off_y = hal_setting_get("lvl_y", 0) / 100.0f;
     s_have = s_level = false;
+    s_opened = kg_tick_ms();
     lv_label_set_text(s_hint, "TAP TO ZERO");
     tick(NULL);
     lv_timer_resume(s_timer);

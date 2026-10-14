@@ -49,6 +49,8 @@ void hal_sysinfo(kg_sysinfo_t *s)
     s->reset_reason = reset_name();
     const esp_partition_t *p = esp_ota_get_running_partition();
     s->app_slot_kb = p ? p->size / 1024 : 0;
-    s->app_kb = ESP.getSketchSize() / 1024;
+    static uint32_t app_kb; /* getSketchSize() reads the whole image back from flash: once */
+    if (!app_kb) app_kb = ESP.getSketchSize() / 1024;
+    s->app_kb = app_kb;
     s->version = KG_VERSION;
 }
