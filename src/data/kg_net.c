@@ -394,7 +394,7 @@ static int http_once(const kg_http_req_t *r, const kg_url_t *u, char *location, 
 
 int kg_http_request(const kg_http_req_t *r)
 {
-    char url[256], loc[256];
+    char url[512], loc[256]; /* url: room for host, port and a relative Location */
     snprintf(url, sizeof url, "%s", r->url);
     for (int hop = 0; hop < 4; hop++) {
         kg_url_t u;
