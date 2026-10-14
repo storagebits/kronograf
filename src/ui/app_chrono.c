@@ -36,7 +36,7 @@ static void refresh(void)
 
     uint32_t laps[KG_MAX_LAPS];
     int n = model_chrono_laps(laps);
-    char text[96] = "", line[32];
+    char text[96] = "", line[48];
     for (int i = 0; i < n && i < 3; i++) {
         uint32_t split = laps[i] - (i + 1 < n ? laps[i + 1] : 0);
         fmt_time(buf, sizeof buf, split);

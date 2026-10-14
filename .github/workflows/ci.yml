@@ -32,7 +32,7 @@ jobs:
       - name: Build
         run: |
           cmake -S sim -B sim/build -DCMAKE_BUILD_TYPE=Release
-          cmake --build sim/build -j"$(nproc)"
+          cmake --build sim/build -j"$(nproc)" -- -k
       - name: Render screenshots
         run: |
           mkdir -p shots
