@@ -119,7 +119,9 @@ Le développement a avancé par tranches, chacune flashée et vérifiée sur la 
 
 **Limites connues.** Cette carte n'a pas de quartz 32 kHz, donc le sommeil léger est impossible tant que le BLE est actif : l'autonomie avec notifications est en cours de mesure (D41). Le connecteur micro-USB de l'exemplaire de développement est capricieux (B2), d'où l'OTA et le flash par blocs.
 
-## Remerciements et licences
+## Licence et remerciements
+
+Code de Kronograf sous [licence MIT](LICENSE). Dépendances et ressources :
 
 - [LVGL](https://lvgl.io) 8.3 (MIT), [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) (Apache 2.0), [XPowersLib](https://github.com/lewisxhe/XPowersLib) et [SensorLib](https://github.com/lewisxhe/SensorLib) (MIT), [stb_image_write](https://github.com/nothings/stb) (domaine public / MIT).
 - Polices [Barlow Condensed](https://fonts.google.com/specimen/Barlow+Condensed) et [Allerta Stencil](https://fonts.google.com/specimen/Allerta+Stencil), sous licence SIL Open Font License (`assets/fonts/OFL-*.txt`).
