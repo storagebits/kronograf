@@ -55,7 +55,7 @@ static void refresh(void)
 {
     kg_sysinfo_t s;
     hal_sysinfo(&s);
-    char b[64], f1[16], f2[16];
+    char b[96], f1[16], f2[16];
 
     snprintf(b, sizeof b, "%.2f V  %d %%", s.batt_mv / 1000.0, s.batt_pct);
     lv_label_set_text(s_batt_big, b);

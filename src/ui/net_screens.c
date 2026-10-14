@@ -436,7 +436,7 @@ static void speed_refresh(const kg_tool_state_t *st)
     net_run_button_set(s_run2, mine && st->running);
     float v = mine ? st->mbps : 0;
     lv_arc_set_value(s_arc, (int16_t)(v >= SPEED_FULL ? 1000 : v * 1000 / SPEED_FULL));
-    char b[64];
+    char b[112];
     snprintf(b, sizeof b, v >= 100 ? "%.0f" : "%.1f", (double)v);
     lv_label_set_text(s_big, mine && st->bytes ? b : "--");
     if (mine && st->bytes)

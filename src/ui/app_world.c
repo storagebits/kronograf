@@ -29,7 +29,7 @@ static void refresh(void)
         struct tm lt;
         bool dst;
         kg_tz_local(KG_ZONES[i].tz, t, &lt, &dst);
-        char b[32];
+        char b[64];
         bool h24 = ui_fmt24();
         snprintf(b, sizeof b, "%02d:%02d", h24 ? lt.tm_hour : (lt.tm_hour + 11) % 12 + 1, lt.tm_min);
         lv_label_set_text(s_time[i], b);
@@ -37,7 +37,7 @@ static void refresh(void)
         int32_t off = kg_tz_offset(KG_ZONES[i].tz, t, NULL);
         int days = (int)((lt.tm_year * 400 + lt.tm_yday) - (home.tm_year * 400 + home.tm_yday));
         if (days > 1) days = -1; /* across New Year's Eve */
-        char o[12] = "UTC";
+        char o[24] = "UTC";
         if (off) snprintf(o, sizeof o, "UTC%s%d%s", off < 0 ? "−" : "+", (int)(off < 0 ? -off : off) / 3600,
                           off % 3600 ? ":30" : "");
         snprintf(b, sizeof b, "%s%s%s%s", h24 ? "" : lt.tm_hour < 12 ? "AM · " : "PM · ", o, dst ? " · summer" : "",
