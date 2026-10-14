@@ -1,10 +1,10 @@
 /*
- * HAL simulée. Valeurs pilotables par variables d'environnement pour des
- * captures reproductibles :
- *   KG_TIME="10:09:30"   heure figée (sinon horloge du Mac)
- *   KG_BATT=72           pourcentage batterie
- *   KG_STEPS=6420        pas du jour
- *   KG_REV=1|2|3         révision simulée
+ * Simulated HAL. Values are controlled by environment variables for reproducible
+ * screenshots:
+ *   KG_TIME="10:09:30"   frozen time (otherwise the Mac's clock)
+ *   KG_BATT=72           battery percentage
+ *   KG_STEPS=6420        today's steps
+ *   KG_REV=1|2|3         simulated board revision
  */
 #include "../hal.h"
 #include "kg_mem.h"
@@ -74,18 +74,18 @@ uint32_t hal_steps_today(void)
 
 void hal_backlight(uint8_t level) { (void)level; }
 
-void hal_vibrate(uint16_t ms) { printf("[sim] vibreur %u ms\n", ms); }
+void hal_vibrate(uint16_t ms) { printf("[sim] vibration %u ms\n", ms); }
 
 void hal_vibrate_pattern(const uint16_t *ms, uint8_t n)
 {
-    printf("[sim] vibreur motif :");
+    printf("[sim] vibration pattern:");
     for (int i = 0; i < n; i++) printf(" %u", ms[i]);
     printf("\n");
 }
 
 void hal_tones(const kg_tone_t *t, uint8_t n)
 {
-    printf("[sim] sons :");
+    printf("[sim] sounds:");
     for (int i = 0; i < n; i++) printf(" %uHz/%ums", t[i].hz, t[i].ms);
     printf("\n");
 }
@@ -100,8 +100,8 @@ void hal_steps_history(uint32_t out[7])
     for (int i = 0; i < 7; i++) out[i] = demo[i];
 }
 
-/* Remplie de motif : la PSRAM de la montre n'est pas initialisée, le simulateur ne doit pas
- * masquer un oubli de remplissage par une mémoire fraîchement mise à zéro. */
+/* Filled with a pattern: the watch's PSRAM is not initialised, so the simulator must not
+ * hide a missing fill behind freshly zeroed memory. */
 void *hal_alloc_large(size_t bytes)
 {
     void *p = malloc(bytes);
@@ -115,9 +115,9 @@ bool hal_time_valid(void) { return getenv("KG_NOTIME") == NULL; }
 
 time_t hal_last_sync(void) { return time(NULL) - 12 * 60; }
 
-const char *hal_time_hint(void) { return hal_time_valid() ? NULL : "Configurer dans secrets.h"; }
+const char *hal_time_hint(void) { return hal_time_valid() ? NULL : "Set up in secrets.h"; }
 
-/* Réglages : table en mémoire (le simulateur repart des valeurs par défaut). */
+/* Settings: in-memory table (the simulator starts from the defaults). */
 static struct { char key[16]; int32_t value; } s_settings[16];
 
 int32_t hal_setting_get(const char *key, int32_t def)
@@ -138,11 +138,11 @@ void hal_setting_set(const char *key, int32_t value)
     }
 }
 
-void hal_brightness_scale(uint8_t pct) { printf("[sim] luminosité %u %%\n", pct); }
+void hal_brightness_scale(uint8_t pct) { printf("[sim] brightness %u %%\n", pct); }
 
 static uint8_t s_bl = 160;
 static uint16_t s_timeout = 10;
-static char s_ssid[33] = "Maison";
+static char s_ssid[33] = "Home";
 uint8_t hal_brightness_get(void) { return s_bl; }
 void hal_brightness_set(uint8_t level) { s_bl = level; }
 uint16_t hal_screen_timeout_get(void) { return s_timeout; }
@@ -153,7 +153,7 @@ void hal_wifi_scan_start(void) { s_scan = 4; }
 int hal_wifi_scan_count(void) { return s_scan < 0 ? -1 : s_scan; }
 bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi)
 {
-    static const char *const names[] = {"Maison", "Maison-5G", "Café du coin", "BELL123"};
+    static const char *const names[] = {"Home", "Home-5G", "Corner Café", "BELL123"};
     static const int levels[] = {-48, -55, -71, -83};
     if (i < 0 || i >= 4) return false;
     snprintf(ssid, n, "%s", names[i]);
@@ -166,10 +166,10 @@ void hal_wifi_set_credentials(const char *ssid, const char *pass)
     snprintf(s_ssid, sizeof s_ssid, "%s", ssid);
 }
 const char *hal_wifi_ssid(void) { return s_ssid; }
-const char *hal_net_status(void) { return "synchronisé"; }
+const char *hal_net_status(void) { return "Synced"; }
 
-/* Météo : vraie réponse Open-Meteo enregistrée (tests/data), heures recalées sur maintenant.
- *   KG_WX=0 aucun relevé ; KG_WX_AGE=minutes ; KG_WX_CODE / KG_WX_TEMP pour les captures. */
+/* Weather: a real recorded Open-Meteo response (tests/data), hours shifted to now.
+ *   KG_WX=0 no reading; KG_WX_AGE=minutes; KG_WX_CODE / KG_WX_TEMP for screenshots. */
 bool hal_weather(kg_weather_t *out)
 {
     memset(out, 0, sizeof *out);
@@ -193,11 +193,11 @@ bool hal_weather(kg_weather_t *out)
 
 void hal_weather_refresh(uint32_t max_age_s) { (void)max_age_s; }
 
-const char *hal_weather_status(void) { return env_int("KG_WX", 1) ? NULL : "Wi-Fi non configuré"; }
+const char *hal_weather_status(void) { return env_int("KG_WX", 1) ? NULL : "Wi-Fi not configured"; }
 
 bool hal_weather_busy(void) { return false; }
 
-/* Bus : KG_BUS=0 sans clé STM, KG_BUS_STOPS="" aucun arrêt choisi. */
+/* Buses: KG_BUS=0 without an STM key, KG_BUS_STOPS="" with no stop selected. */
 static char s_stops[40] = "52345";
 bool hal_bus_available(void) { return env_int("KG_BUS", 1) != 0; }
 const char *hal_bus_stops(void)
@@ -228,13 +228,13 @@ void hal_bus_refresh(uint32_t max_age_s) { (void)max_age_s; }
 
 const char *hal_bus_status(void)
 {
-    if (!hal_bus_available()) return "Clé STM absente (secrets.h)";
-    return hal_bus_stops()[0] ? NULL : "Aucun arrêt choisi";
+    if (!hal_bus_available()) return "No STM API key (secrets.h)";
+    return hal_bus_stops()[0] ? NULL : "No stop selected";
 }
 
-/* BLE / notifications : KG_BLE=off|waiting|pairing|ready (défaut ready), KG_NOTIF=nombre
- * de notifications factices (défaut 3), KG_NOTIF_CAT pour la première. */
-static uint32_t s_dismissed; /* masque des notifications effacées */
+/* BLE / notifications: KG_BLE=off|waiting|pairing|ready (default ready), KG_NOTIF=number of
+ * fake notifications (default 3), KG_NOTIF_CAT for the first one. */
+static uint32_t s_dismissed; /* bit mask of cleared notifications */
 static bool s_ble_on = true;
 
 kg_ble_state_t hal_ble_state(void)
@@ -251,10 +251,10 @@ void hal_ble_enable(bool on) { s_ble_on = on; }
 void hal_ble_forget(void) {}
 
 static const kg_notif_t DEMO_NOTIFS[] = {
-    {101, KG_CAT_SOCIAL, "com.apple.MobileSMS", "Camille", "On se retrouve au marché Jean-Talon à 18 h ? J'apporte les croissants.", "20261012T171205"},
-    {102, KG_CAT_EMAIL, "com.apple.mobilemail", "STM — Info-service", "Ligne 24 : détour rue Sherbrooke jusqu'à nouvel ordre.", "20261012T164010"},
-    {103, KG_CAT_SCHEDULE, "com.apple.mobilecal", "Dentiste", "Demain à 9 h 30 · 1250 rue Sainte-Catherine", "20261012T150000"},
-    {104, KG_CAT_CALL, "com.apple.mobilephone", "Maman", "Appel entrant", "20261012T171500"},
+    {101, KG_CAT_SOCIAL, "com.apple.MobileSMS", "Camille", "Meet at Jean-Talon Market at 6? I'll bring the croissants.", "20261012T171205"},
+    {102, KG_CAT_EMAIL, "com.apple.mobilemail", "STM — Service info", "Route 24: detour via Sherbrooke Street until further notice.", "20261012T164010"},
+    {103, KG_CAT_SCHEDULE, "com.apple.mobilecal", "Dentist", "Tomorrow at 9:30 · 1250 Sainte-Catherine St.", "20261012T150000"},
+    {104, KG_CAT_CALL, "com.apple.mobilephone", "Mom", "Incoming call", "20261012T171500"},
 };
 
 int hal_notif_count(void)
@@ -279,7 +279,7 @@ bool hal_notif_get(int i, kg_notif_t *out)
     return false;
 }
 
-/* Une « nouvelle » notification arrive peu après le démarrage si KG_NOTIF_ALERT=1. */
+/* A "new" notification arrives shortly after start-up when KG_NOTIF_ALERT=1. */
 uint32_t hal_notif_seq(void) { return SDL_GetTicks() > 150 ? (uint32_t)env_int("KG_NOTIF_ALERT", 0) : 0; }
 
 void hal_notif_dismiss(uint32_t uid)

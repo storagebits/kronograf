@@ -1,6 +1,6 @@
 /*
- * App Minuteur. L'échéance est en heure murale : le minuteur continue écran éteint, et
- * la gestion d'énergie réveille la montre à l'échéance (hal_schedule_wakeup).
+ * Timer app. The deadline is kept in wall-clock time: the timer keeps going with the
+ * screen off, and power management wakes the watch when it is due (hal_schedule_wakeup).
  */
 #include "nav.h"
 #include "kit.h"
@@ -15,13 +15,13 @@ static void refresh(void)
 {
     kg_timer_state_t st = model_timer_state();
     uint32_t left = model_timer_remaining_ms(), dur = model_timer_duration();
-    uint32_t s = (left + 999) / 1000; /* arrondi supérieur : jamais « 00:00 » avant la fin */
+    uint32_t s = (left + 999) / 1000; /* round up: never "00:00" before the end */
     lv_label_set_text_fmt(s_time, "%02lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
     lv_arc_set_value(s_arc, dur ? (int16_t)(1000 - (uint64_t)left * 1000 / dur) : 0);
 
     bool idle = st == KG_TIMER_IDLE || st == KG_TIMER_DONE;
-    kit_button_set_text(s_main, st == KG_TIMER_RUNNING ? "Pause" : st == KG_TIMER_PAUSED ? "Reprise" : "Départ");
-    kit_button_set_text(s_left, idle ? "-1" : "RàZ");
+    kit_button_set_text(s_main, st == KG_TIMER_RUNNING ? "Pause" : st == KG_TIMER_PAUSED ? "Resume" : "Start");
+    kit_button_set_text(s_left, idle ? "-1" : "Reset");
     if (idle) lv_obj_clear_state(s_right, LV_STATE_DISABLED);
     else lv_obj_add_state(s_right, LV_STATE_DISABLED);
 }
@@ -67,7 +67,7 @@ static void main_cb(lv_event_t *e)
 static lv_obj_t *create(void)
 {
     lv_obj_t *scr = kit_screen();
-    kit_title(scr, "MINUTEUR");
+    kit_title(scr, "TIMER");
 
     s_arc = lv_arc_create(scr);
     lv_obj_set_size(s_arc, 150, 150);
@@ -83,13 +83,13 @@ static lv_obj_t *create(void)
     lv_obj_set_style_arc_width(s_arc, 6, LV_PART_INDICATOR);
 
     s_time = kit_label(scr, &kg_font_digits_56, KG_C_TEXT, "05:00");
-    lv_obj_set_width(s_time, 130); /* chiffres proportionnels : largeur fixe, texte centré */
+    lv_obj_set_width(s_time, 130); /* proportional digits: fixed width, centred text */
     lv_obj_set_style_text_align(s_time, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align_to(s_time, s_arc, LV_ALIGN_CENTER, 0, 0);
 
     s_left = kit_button(scr, "-1", false, 58, 44, left_cb, NULL);
     lv_obj_align(s_left, LV_ALIGN_BOTTOM_LEFT, 10, -12);
-    s_main = kit_button(scr, "Départ", true, 92, 44, main_cb, NULL);
+    s_main = kit_button(scr, "Start", true, 92, 44, main_cb, NULL);
     lv_obj_align(s_main, LV_ALIGN_BOTTOM_MID, 0, -12);
     s_right = kit_button(scr, "+1", false, 58, 44, right_cb, NULL);
     lv_obj_align(s_right, LV_ALIGN_BOTTOM_RIGHT, -10, -12);
@@ -111,7 +111,7 @@ static void on_hide(void) { lv_timer_pause(s_timer); }
 
 const kg_app_t kg_app_timer = {
     .name = "timer",
-    .label = "Minuteur",
+    .label = "Timer",
     .icon = KG_ICON_TIMER,
     .create = create,
     .on_show = on_show,

@@ -2,7 +2,7 @@
 #include "theme.h"
 #include <math.h>
 
-/* Dessin sur une grille de 24 unités, mise à l'échelle par `s`. */
+/* Drawn on a 24-unit grid, scaled by `s`. */
 typedef struct {
     lv_draw_ctx_t *ctx;
     float cx, cy, s;
@@ -43,7 +43,7 @@ static void sun(const pen_t *p, float x, float y, float r)
     }
 }
 
-/* Nuage plein : base arrondie et deux bosses. */
+/* Solid cloud: rounded base and two bumps. */
 static void cloud(const pen_t *p, float x, float y, lv_color_t c)
 {
     disc(p, x - 4.5f, y + 1.0f, 4.5f, c);

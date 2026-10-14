@@ -27,7 +27,7 @@ size_t kg_ancs_build_request(uint8_t *o, size_t cap, uint32_t uid)
     put_uid(o + n, uid);
     n += 4;
     o[n++] = ATTR_APP;
-    o[n++] = ATTR_TITLE; /* titre et message : longueur maximale demandée (16 bits) */
+    o[n++] = ATTR_TITLE; /* title and message: requested maximum length (16 bits) */
     o[n++] = sizeof(((kg_notif_t *)0)->title) - 1;
     o[n++] = 0;
     o[n++] = ATTR_MESSAGE;
@@ -50,7 +50,7 @@ void kg_ancs_rx_reset(kg_ancs_rx_t *rx) { rx->len = 0; }
 
 bool kg_ancs_rx_feed(kg_ancs_rx_t *rx, const uint8_t *d, size_t len, kg_notif_t *out)
 {
-    if (rx->len + len > sizeof rx->buf) { /* réponse plus longue que prévu : on repart de zéro */
+    if (rx->len + len > sizeof rx->buf) { /* response longer than expected: start over */
         rx->len = 0;
         if (len > sizeof rx->buf) return false;
     }
@@ -59,7 +59,7 @@ bool kg_ancs_rx_feed(kg_ancs_rx_t *rx, const uint8_t *d, size_t len, kg_notif_t 
 
     const uint8_t *p = rx->buf, *end = rx->buf + rx->len;
     if (rx->len < 5 || p[0] != 0) {
-        if (rx->len >= 1 && p[0] != 0) rx->len = 0; /* pas une réponse d'attributs */
+        if (rx->len >= 1 && p[0] != 0) rx->len = 0; /* not an attributes response */
         return false;
     }
     kg_notif_t n;
@@ -67,7 +67,7 @@ bool kg_ancs_rx_feed(kg_ancs_rx_t *rx, const uint8_t *d, size_t len, kg_notif_t 
     n.uid = rd32(p + 1);
     p += 5;
     for (int k = 0; k < N_ATTRS; k++) {
-        if (end - p < 3) return false; /* attendre la suite */
+        if (end - p < 3) return false; /* wait for more */
         uint8_t id = p[0];
         size_t l = p[1] | p[2] << 8;
         if ((size_t)(end - p - 3) < l) return false;
@@ -86,7 +86,7 @@ bool kg_ancs_rx_feed(kg_ancs_rx_t *rx, const uint8_t *d, size_t len, kg_notif_t 
     return true;
 }
 
-/* ----------------------------------------------------------------- texte */
+/* ------------------------------------------------------------------ text */
 
 static bool in_font(uint32_t c)
 {
@@ -103,7 +103,7 @@ void kg_text_sanitize(char *out, size_t n, const char *in, size_t in_len)
 {
     size_t o = 0;
     const uint8_t *p = (const uint8_t *)in, *end = p + in_len;
-    bool space = true; /* pas d'espace en tête */
+    bool space = true; /* no leading space */
     while (p < end && *p) {
         uint32_t c;
         int k;
@@ -118,7 +118,7 @@ void kg_text_sanitize(char *out, size_t n, const char *in, size_t in_len)
         p += k;
 
         if (c == '\r' || c == '\t') c = ' ';
-        if (c == 0xA0 || c == 0x202F) c = ' '; /* espaces insécables → espace simple */
+        if (c == 0xA0 || c == 0x202F) c = ' '; /* non-breaking spaces → plain space */
         if (c == '\n') {
             if (o && out[o - 1] == '\n') continue;
             while (o && out[o - 1] == ' ') o--;
@@ -134,7 +134,7 @@ void kg_text_sanitize(char *out, size_t n, const char *in, size_t in_len)
             out[o++] = ' ';
             continue;
         }
-        if (!in_font(c)) continue; /* émojis, symboles : retirés */
+        if (!in_font(c)) continue; /* emoji, symbols: removed */
         if (o + (size_t)k >= n) break;
         memcpy(out + o, src, (size_t)k);
         o += (size_t)k;
@@ -147,13 +147,13 @@ void kg_text_sanitize(char *out, size_t n, const char *in, size_t in_len)
 static const struct {
     const char *bundle, *name;
 } APPS[] = {
-    {"com.apple.MobileSMS", "Messages"},      {"com.apple.mobilephone", "Téléphone"},
-    {"com.apple.mobilemail", "Mail"},         {"com.apple.mobilecal", "Calendrier"},
-    {"com.apple.reminders", "Rappels"},       {"com.apple.facetime", "FaceTime"},
-    {"com.apple.Passbook", "Cartes"},         {"com.apple.Health", "Santé"},
-    {"com.apple.news", "News"},               {"com.apple.weather", "Météo"},
-    {"com.apple.Maps", "Plans"},              {"com.apple.Home", "Maison"},
-    {"com.apple.findmy", "Localiser"},        {"net.whatsapp.WhatsApp", "WhatsApp"},
+    {"com.apple.MobileSMS", "Messages"},      {"com.apple.mobilephone", "Phone"},
+    {"com.apple.mobilemail", "Mail"},         {"com.apple.mobilecal", "Calendar"},
+    {"com.apple.reminders", "Reminders"},       {"com.apple.facetime", "FaceTime"},
+    {"com.apple.Passbook", "Wallet"},         {"com.apple.Health", "Health"},
+    {"com.apple.news", "News"},               {"com.apple.weather", "Weather"},
+    {"com.apple.Maps", "Maps"},              {"com.apple.Home", "Home"},
+    {"com.apple.findmy", "Find My"},        {"net.whatsapp.WhatsApp", "WhatsApp"},
     {"com.facebook.Messenger", "Messenger"},  {"ph.telegra.Telegraph", "Telegram"},
     {"org.whispersystems.signal", "Signal"},  {"com.tinyspeck.chatlyio", "Slack"},
     {"com.microsoft.Office.Outlook", "Outlook"}, {"com.google.Gmail", "Gmail"},

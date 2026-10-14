@@ -1,7 +1,7 @@
 /*
- * App Météo (Montréal) : conditions actuelles, prochaines heures, et prochains bus STM
- * aux arrêts suivis quand une clé est fournie. Tout vient du cache de la HAL ; ouvrir
- * l'app demande une mise à jour si le relevé est ancien (Wi-Fi allumé le temps de la requête).
+ * Weather app (Montréal): current conditions, the next hours, and the next STM buses at
+ * the followed stops when an API key is provided. Everything comes from the HAL cache;
+ * opening the app requests an update when the reading is old (Wi-Fi on for the request).
  */
 #include "nav.h"
 #include "kit.h"
@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define N_COLS 6        /* prochaines heures affichées, une toutes les 2 h */
+#define N_COLS 6        /* upcoming hours shown, one every 2 h */
 #define WX_MAX_AGE_S (10 * 60)
 #define BUS_MAX_AGE_S 60
 
@@ -23,7 +23,7 @@ static lv_obj_t *s_bus_title, *s_bus_line[2], *s_bus_route[2], *s_bus_times[2], 
 static lv_timer_t *s_timer;
 static uint32_t s_ticks;
 
-/* « −3° » avec un vrai signe moins. */
+/* "−3°" with a real minus sign. */
 static void fmt_temp(char *buf, size_t n, float t)
 {
     int v = (int)lroundf(t);
@@ -31,14 +31,14 @@ static void fmt_temp(char *buf, size_t n, float t)
     else snprintf(buf, n, "%d°", v);
 }
 
-/* Âge du relevé, au pochoir sur deux lignes à côté de la température. */
+/* Age of the reading, stencilled on two lines next to the temperature. */
 static void fmt_age(char *buf, size_t n, const char *first, time_t fetched)
 {
     long s = (long)(time(NULL) - fetched);
-    if (s < 90) snprintf(buf, n, "%s\nÀ L'INSTANT", first);
-    else if (s < 3600) snprintf(buf, n, "%s\nIL Y A %ld MIN", first, s / 60);
-    else if (s < 86400) snprintf(buf, n, "%s\nIL Y A %ld H", first, s / 3600);
-    else snprintf(buf, n, "%s\nIL Y A %ld J", first, s / 86400);
+    if (s < 90) snprintf(buf, n, "%s\nJUST NOW", first);
+    else if (s < 3600) snprintf(buf, n, "%s\n%ld MIN AGO", first, s / 60);
+    else if (s < 86400) snprintf(buf, n, "%s\n%ld H AGO", first, s / 3600);
+    else snprintf(buf, n, "%s\n%ld D AGO", first, s / 86400);
 }
 
 static void refresh_weather(void)
@@ -55,7 +55,7 @@ static void refresh_weather(void)
     }
     if (!ok) {
         lv_obj_clear_flag(s_empty, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(s_empty, hal_weather_busy() ? "Mise à jour de la météo…" : status ? status : "Pas encore de relevé");
+        lv_label_set_text(s_empty, hal_weather_busy() ? "Updating the weather…" : status ? status : "No reading yet");
         for (int i = 0; i < N_COLS; i++) {
             lv_obj_add_flag(s_col_h[i], LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(s_col_icon[i], LV_OBJ_FLAG_HIDDEN);
@@ -69,14 +69,14 @@ static void refresh_weather(void)
     fmt_temp(buf, sizeof buf, wx.temp);
     lv_label_set_text(s_temp, buf);
     fmt_temp(t1, sizeof t1, wx.feels);
-    snprintf(buf, sizeof buf, "%s, ressenti %s", kg_weather_label(wx.code), t1);
+    snprintf(buf, sizeof buf, "%s, feels like %s", kg_weather_label(wx.code), t1);
     lv_label_set_text(s_desc, buf);
     fmt_temp(t1, sizeof t1, wx.tmin);
     fmt_temp(t2, sizeof t2, wx.tmax);
-    snprintf(buf, sizeof buf, "min %s   max %s   pluie %u %%", t1, t2, wx.pop_max);
+    snprintf(buf, sizeof buf, "low %s   high %s   rain %u %%", t1, t2, wx.pop_max);
     lv_label_set_text(s_range, buf);
 
-    /* Colonnes : on saute les heures déjà passées. */
+    /* Columns: skip hours already past. */
     time_t now = time(NULL);
     int first = 0;
     while (first < wx.n_hours - 1 && wx.hours[first + 1].t <= now) first++;
@@ -97,9 +97,9 @@ static void refresh_weather(void)
         lv_label_set_text(s_col_t[i], buf);
     }
 
-    /* Données présentes : un échec de mise à jour n'efface rien, il se signale ici. */
+    /* Data present: a failed update erases nothing, it is flagged here. */
     bool busy = hal_weather_busy();
-    fmt_age(buf, sizeof buf, busy ? "MISE À JOUR" : status ? "HORS LIGNE" : "RELEVÉ", wx.fetched);
+    fmt_age(buf, sizeof buf, busy ? "UPDATING" : status ? "OFFLINE" : "UPDATED", wx.fetched);
     lv_label_set_text(s_age, buf);
     lv_obj_set_style_text_color(s_age, status && !busy ? KG_C_WARN : KG_C_TEXT_DIM, 0);
 }
@@ -115,25 +115,25 @@ static void refresh_bus(void)
 {
     if (!hal_bus_available()) {
         lv_obj_add_flag(s_bus_title, LV_OBJ_FLAG_HIDDEN);
-        bus_hint("Bus STM : clé absente dans secrets.h");
+        bus_hint("STM buses: no API key in secrets.h");
         return;
     }
     lv_obj_clear_flag(s_bus_title, LV_OBJ_FLAG_HIDDEN);
     const char *stops = hal_bus_stops();
-    lv_label_set_text_fmt(s_bus_title, "BUS STM  %s", stops[0] ? stops : "");
+    lv_label_set_text_fmt(s_bus_title, "STM BUS  %s", stops[0] ? stops : "");
     kg_bus_t bus;
     bool ok = hal_bus(&bus);
     const char *status = hal_bus_status();
     if (!stops[0]) {
-        bus_hint("Choisir un arrêt : Réglages");
+        bus_hint("Pick a stop in Settings");
         return;
     }
     if (!ok) {
-        bus_hint(status ? status : "Recherche des passages…");
+        bus_hint(status ? status : "Fetching departures…");
         return;
     }
 
-    /* Deux lignes au plus, chacune avec ses deux prochains passages. */
+    /* At most two routes, each with its next two departures. */
     time_t now = time(NULL);
     char routes[2][8] = {"", ""};
     char times[2][32] = {"", ""};
@@ -149,13 +149,13 @@ static void refresh_bus(void)
         }
         if (count[r] == 2) continue;
         size_t len = strlen(times[r]);
-        if (count[r]) len += (size_t)snprintf(times[r] + len, sizeof times[r] - len, "   puis   ");
-        if (min == 0) snprintf(times[r] + len, sizeof times[r] - len, "à l'arrêt");
+        if (count[r]) len += (size_t)snprintf(times[r] + len, sizeof times[r] - len, "   then   ");
+        if (min == 0) snprintf(times[r] + len, sizeof times[r] - len, "due");
         else snprintf(times[r] + len, sizeof times[r] - len, "%ld min", min);
         count[r]++;
     }
     if (!n_routes) {
-        bus_hint("Aucun passage prévu");
+        bus_hint("No departures scheduled");
         return;
     }
     lv_obj_add_flag(s_bus_hint, LV_OBJ_FLAG_HIDDEN);
@@ -173,7 +173,7 @@ static void refresh_bus(void)
 static void tick(lv_timer_t *t)
 {
     (void)t;
-    if (++s_ticks % 30 == 0) hal_bus_refresh(BUS_MAX_AGE_S); /* toutes les 30 s, si périmé */
+    if (++s_ticks % 30 == 0) hal_bus_refresh(BUS_MAX_AGE_S); /* every 30 s, if stale */
     refresh_weather();
     refresh_bus();
 }
@@ -181,7 +181,7 @@ static void tick(lv_timer_t *t)
 static lv_obj_t *create(void)
 {
     lv_obj_t *scr = kit_screen();
-    kit_title(scr, "MÉTÉO  MONTRÉAL");
+    kit_title(scr, "WEATHER  MONTREAL");
 
     s_icon = kg_wx_icon_create(scr, 52);
     lv_obj_set_pos(s_icon, 22, 26);
@@ -204,7 +204,7 @@ static lv_obj_t *create(void)
     lv_obj_set_style_text_align(s_empty, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(s_empty, LV_ALIGN_TOP_MID, 0, 60);
 
-    /* Bande horaire sur fond creusé. */
+    /* Hourly strip on a recessed background. */
     lv_obj_t *band = s_band = lv_obj_create(scr);
     lv_obj_remove_style_all(band);
     lv_obj_set_size(band, 228, 58);
@@ -221,14 +221,14 @@ static lv_obj_t *create(void)
         lv_obj_set_pos(s_col_h[i], cx - 19, 126);
         s_col_icon[i] = kg_wx_icon_create(scr, 20);
         lv_obj_set_pos(s_col_icon[i], cx - 10, 139);
-        lv_obj_set_style_bg_color(s_col_icon[i], KG_C_SURFACE, 0); /* fond du croissant de lune */
+        lv_obj_set_style_bg_color(s_col_icon[i], KG_C_SURFACE, 0); /* background behind the crescent moon */
         s_col_t[i] = kit_label(scr, &kg_font_text_16, KG_C_TEXT, "");
         lv_obj_set_width(s_col_t[i], 38);
         lv_obj_set_style_text_align(s_col_t[i], LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_pos(s_col_t[i], cx - 19, 159);
     }
 
-    /* Bus STM */
+    /* STM buses */
     s_bus_title = kit_label(scr, &kg_font_stencil_11, KG_C_TEXT_DIM, "");
     lv_obj_set_style_text_letter_space(s_bus_title, 1, 0);
     lv_obj_set_pos(s_bus_title, 12, 186);
@@ -241,7 +241,7 @@ static lv_obj_t *create(void)
         s_bus_route[i] = kit_label(s_bus_line[i], &kg_font_text_16, KG_C_BG, "");
         lv_obj_set_width(s_bus_route[i], 34);
         lv_obj_set_style_text_align(s_bus_route[i], LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_bg_color(s_bus_route[i], KG_C_RAIN, 0); /* pastille de ligne */
+        lv_obj_set_style_bg_color(s_bus_route[i], KG_C_RAIN, 0); /* route badge */
         lv_obj_set_style_bg_opa(s_bus_route[i], LV_OPA_COVER, 0);
         lv_obj_set_style_radius(s_bus_route[i], 4, 0);
         lv_obj_align(s_bus_route[i], LV_ALIGN_LEFT_MID, 0, 0);
@@ -275,7 +275,7 @@ static void on_hide(void) { lv_timer_pause(s_timer); }
 
 const kg_app_t kg_app_weather = {
     .name = "weather",
-    .label = "Météo",
+    .label = "Weather",
     .icon = KG_ICON_WEATHER,
     .create = create,
     .on_show = on_show,

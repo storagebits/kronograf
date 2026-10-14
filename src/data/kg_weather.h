@@ -1,6 +1,6 @@
 /*
- * Météo Open-Meteo : modèle, analyse de la réponse JSON, libellés français.
- * Code C pur, commun à la montre et au simulateur (testé sur une vraie réponse).
+ * Open-Meteo weather: model, JSON response parser, labels.
+ * Plain C shared by the watch and the simulator (tested against a real response).
  */
 #pragma once
 #include <stdbool.h>
@@ -17,20 +17,20 @@ extern "C" {
 typedef struct {
     time_t t;
     float temp;
-    uint8_t code; /* code météo OMM */
-    uint8_t pop;  /* probabilité de précipitation, % */
+    uint8_t code; /* WMO weather code */
+    uint8_t pop;  /* precipitation probability, % */
 } kg_wx_hour_t;
 
 typedef struct {
     bool valid;
-    time_t fetched; /* heure de réception (0 = jamais) */
-    time_t obs;     /* heure de l'observation « actuelle » */
+    time_t fetched; /* time received (0 = never) */
+    time_t obs;     /* time of the "current" observation */
     float temp, feels, wind_kmh;
     uint8_t code;
     bool day;
-    float tmax, tmin; /* aujourd'hui */
+    float tmax, tmin; /* today */
     uint8_t pop_max;
-    float tmax2, tmin2; /* demain */
+    float tmax2, tmin2; /* tomorrow */
     uint8_t code2, pop2;
     uint8_t n_hours;
     kg_wx_hour_t hours[KG_WX_HOURS];
@@ -41,7 +41,7 @@ typedef enum {
     KG_WX_DRIZZLE, KG_WX_RAIN, KG_WX_SNOW, KG_WX_STORM,
 } kg_wx_icon_t;
 
-/* Requête Open-Meteo (HTTP simple : aucune donnée personnelle, coordonnées publiques de Montréal). */
+/* Open-Meteo request (plain HTTP: no personal data, public coordinates of downtown Montréal). */
 #define KG_WX_URL                                                                                          \
     "http://api.open-meteo.com/v1/forecast?latitude=45.5017&longitude=-73.5673"                             \
     "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m"                       \
@@ -49,10 +49,10 @@ typedef enum {
     "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"               \
     "&timezone=America%2FToronto&forecast_days=2&forecast_hours=12&timeformat=unixtime"
 
-/* Analyse la réponse ; `out->fetched` n'est pas touché. Faux si un champ essentiel manque. */
+/* Parses the response; `out->fetched` is left untouched. False if an essential field is missing. */
 bool kg_weather_parse(const char *json, size_t len, kg_weather_t *out);
 
-/* Libellé court en français (« Pluie », « Neige »…). */
+/* Short label ("Rain", "Snow"…). */
 const char *kg_weather_label(uint8_t code);
 kg_wx_icon_t kg_weather_icon(uint8_t code, bool day);
 

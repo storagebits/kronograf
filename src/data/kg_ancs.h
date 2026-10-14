@@ -1,7 +1,7 @@
 /*
- * ANCS (Apple Notification Center Service) : décodage des trames, requêtes d'attributs,
- * réassemblage des réponses, nettoyage du texte pour nos polices. Code C pur, commun à la
- * montre et au simulateur (testé hôte : tests/test_data.c).
+ * ANCS (Apple Notification Center Service): frame decoding, attribute requests, response
+ * reassembly, text clean-up for our fonts. Plain C shared by the watch and the simulator
+ * (host-tested: tests/test_data.c).
  */
 #pragma once
 #include <stdbool.h>
@@ -33,37 +33,36 @@ typedef struct {
 typedef struct {
     uint32_t uid;
     uint8_t category;
-    char app[40];    /* identifiant d'app iOS (com.apple.MobileSMS…) */
+    char app[40];    /* iOS app identifier (com.apple.MobileSMS…) */
     char title[64];
     char message[192];
-    char date[16];   /* « 20261012T143005 » */
+    char date[16];   /* "20261012T143005" */
 } kg_notif_t;
 
-/* Trame de la Notification Source (8 octets). */
+/* Notification Source frame (8 bytes). */
 bool kg_ancs_parse_event(const uint8_t *data, size_t len, kg_ancs_event_t *out);
 
-/* Requête « Get Notification Attributes » : app, titre, message, date. Retourne sa taille. */
+/* "Get Notification Attributes" request: app, title, message, date. Returns its size. */
 size_t kg_ancs_build_request(uint8_t *out, size_t cap, uint32_t uid);
 
-/* Requête « Perform Notification Action » (0 : positive, 1 : négative — effacer, refuser l'appel). */
+/* "Perform Notification Action" request (0: positive, 1: negative — clear, decline a call). */
 size_t kg_ancs_build_action(uint8_t *out, size_t cap, uint32_t uid, uint8_t action);
 
-/* Réassemblage de la Data Source : une réponse peut arriver en plusieurs trames. */
+/* Data Source reassembly: a response may span several frames. */
 typedef struct {
     uint8_t buf[512];
     size_t len;
 } kg_ancs_rx_t;
 
 void kg_ancs_rx_reset(kg_ancs_rx_t *rx);
-/* Ajoute une trame ; vrai quand une réponse complète a été décodée dans `out`. */
+/* Adds a frame; true once a complete response has been decoded into `out`. */
 bool kg_ancs_rx_feed(kg_ancs_rx_t *rx, const uint8_t *data, size_t len, kg_notif_t *out);
 
-/* Nom lisible d'une app (« Messages », « WhatsApp »…) ; à défaut, dernier segment de l'identifiant. */
+/* Readable app name ("Messages", "WhatsApp"…); otherwise the identifier's last segment. */
 const char *kg_ancs_app_name(const char *bundle, char *buf, size_t n);
 
-/* Copie UTF-8 en ne gardant que les caractères de nos polices (latin-1 et ponctuation
- * française) ; guillemets typographiques normalisés, émojis retirés, jamais de coupure au
- * milieu d'un caractère. */
+/* UTF-8 copy keeping only characters our fonts have (Latin-1 and typographic
+ * punctuation); emoji removed, never cut in the middle of a character. */
 void kg_text_sanitize(char *out, size_t n, const char *in, size_t in_len);
 
 #ifdef __cplusplus

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ------------------------------------------------------- protobuf en mémoire */
+/* ------------------------------------------------------- in-memory protobuf */
 
 typedef struct {
     const uint8_t *p, *end;
@@ -22,7 +22,7 @@ static bool pb_varint(pb_t *b, uint64_t *v)
     return false;
 }
 
-/* Champ suivant : numéro, type, et pour les champs « longueur » la sous-zone. */
+/* Next field: number, wire type, and for length-delimited fields the sub-range. */
 static bool pb_next(pb_t *b, uint32_t *field, uint32_t *wire, uint64_t *val, pb_t *sub)
 {
     uint64_t tag;
@@ -64,7 +64,7 @@ static void add_dep(kg_gtfs_t *g, const char *route, const char *stop, time_t t)
 {
     kg_bus_t *o = &g->out;
     if (t < g->not_before) return;
-    /* Insertion triée ; au-delà de la capacité, on garde les plus proches. */
+    /* Sorted insert; past capacity, keep the soonest. */
     int i = o->n;
     if (o->n == KG_BUS_MAX_DEPS) {
         if (t >= o->deps[KG_BUS_MAX_DEPS - 1].t) return;
@@ -105,7 +105,7 @@ static void parse_trip_update(kg_gtfs_t *g, pb_t tu)
     uint32_t f, w;
     uint64_t v;
     pb_t sub, scan = tu;
-    /* Le trajet (route_id) peut venir après les arrêts : premier passage pour lui. */
+    /* The trip (route_id) may come after the stops: first pass for it. */
     while (pb_next(&scan, &f, &w, &v, &sub)) {
         if (f != 1 || w != 2) continue;
         pb_t trip = sub, s2;
@@ -131,13 +131,13 @@ static void parse_message(kg_gtfs_t *g, uint32_t field, pb_t m)
     uint32_t f, w;
     uint64_t v;
     pb_t sub;
-    if (field == 1) { /* FeedHeader : horodatage (3) */
+    if (field == 1) { /* FeedHeader: timestamp (3) */
         while (pb_next(&m, &f, &w, &v, &sub))
             if (f == 3 && w == 0) g->out.feed_ts = (time_t)v;
         return;
     }
     g->entities++;
-    while (pb_next(&m, &f, &w, &v, &sub)) /* FeedEntity : trip_update (3) */
+    while (pb_next(&m, &f, &w, &v, &sub)) /* FeedEntity: trip_update (3) */
         if (f == 3 && w == 2) parse_trip_update(g, sub);
 }
 
@@ -159,11 +159,11 @@ void kg_gtfs_init(kg_gtfs_t *g, uint8_t *buf, size_t cap, const char *stops, tim
     }
 }
 
-/* Niveau supérieur (FeedMessage) en flux : tag, longueur, puis une entité entière en tampon. */
+/* Top level (FeedMessage) streamed: tag, length, then a whole entity in the buffer. */
 void kg_gtfs_feed(kg_gtfs_t *g, const uint8_t *data, size_t n)
 {
     while (n) {
-        if (g->phase <= 1) { /* varint : tag puis longueur */
+        if (g->phase <= 1) { /* varint: tag, then length */
             uint8_t c = *data++;
             n--;
             g->varint |= (uint64_t)(c & 0x7F) << g->shift;
@@ -175,7 +175,7 @@ void kg_gtfs_feed(kg_gtfs_t *g, const uint8_t *data, size_t n)
             if (g->phase == 0) {
                 g->field = (uint32_t)(v >> 3);
                 g->wire = (uint32_t)(v & 7);
-                if (g->wire != 2) { /* rien d'autre au niveau supérieur : flux inattendu */
+                if (g->wire != 2) { /* nothing else at the top level: unexpected feed */
                     g->phase = 3;
                     g->need = SIZE_MAX;
                     continue;

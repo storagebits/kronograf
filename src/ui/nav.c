@@ -17,11 +17,11 @@ static const kg_app_t *const APPS[] = {&kg_app_chrono, &kg_app_timer, &kg_app_al
 
 static lv_obj_t *s_launcher;
 static lv_obj_t *s_app_scr[N_APPS];
-static int s_app = -1;              /* app affichée, -1 sinon */
+static int s_app = -1;              /* app on screen, -1 otherwise */
 static bool s_in_launcher;
-static lv_obj_t *s_return_to;       /* écran à retrouver après une alerte */
+static lv_obj_t *s_return_to;       /* screen to return to after an alert */
 
-/* ---------------------------------------------------------- pictogrammes */
+/* ------------------------------------------------------------ pictograms */
 
 static void line(lv_draw_ctx_t *ctx, const lv_draw_line_dsc_t *d, lv_coord_t x1, lv_coord_t y1, lv_coord_t x2,
                  lv_coord_t y2)
@@ -42,7 +42,7 @@ static void arc(lv_draw_ctx_t *ctx, lv_coord_t w, lv_color_t c, lv_coord_t cx, l
     lv_draw_arc(ctx, &d, &center, r, a0, a1);
 }
 
-/* Pictogrammes vectoriels, centrés en (cx, cy), environ 22 px. */
+/* Vector pictograms, centred on (cx, cy), about 22 px. */
 static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coord_t cy)
 {
     lv_draw_line_dsc_t d;
@@ -54,21 +54,21 @@ static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
     acc.color = KG_C_ACCENT;
 
     switch (icon) {
-    case KG_ICON_CHRONO: /* boîtier, poussoir, aiguille */
+    case KG_ICON_CHRONO: /* case, pusher, hand */
         arc(ctx, 2, KG_C_HAND, cx, cy + 2, 10, 0, 360);
         line(ctx, &d, cx, cy - 11, cx, cy - 13);
         line(ctx, &d, cx - 3, cy - 14, cx + 3, cy - 14);
         line(ctx, &d, cx + 8, cy - 7, cx + 10, cy - 9);
         line(ctx, &acc, cx, cy + 2, cx + 4, cy - 4);
         break;
-    case KG_ICON_TIMER: /* sablier */
+    case KG_ICON_TIMER: /* hourglass */
         line(ctx, &d, cx - 8, cy - 11, cx + 8, cy - 11);
         line(ctx, &d, cx - 8, cy + 11, cx + 8, cy + 11);
         line(ctx, &d, cx - 6, cy - 11, cx + 6, cy + 11);
         line(ctx, &d, cx + 6, cy - 11, cx - 6, cy + 11);
         line(ctx, &acc, cx - 3, cy + 8, cx + 3, cy + 8);
         break;
-    case KG_ICON_ALARM: /* cloche */
+    case KG_ICON_ALARM: /* bell */
         arc(ctx, 2, KG_C_HAND, cx, cy, 8, 180, 360);
         line(ctx, &d, cx - 8, cy, cx - 9, cy + 7);
         line(ctx, &d, cx + 8, cy, cx + 9, cy + 7);
@@ -76,7 +76,7 @@ static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
         line(ctx, &acc, cx - 2, cy + 12, cx + 2, cy + 12);
         line(ctx, &d, cx, cy - 8, cx, cy - 10);
         break;
-    case KG_ICON_STEPS: { /* deux empreintes décalées */
+    case KG_ICON_STEPS: { /* two offset footprints */
         lv_draw_rect_dsc_t r;
         lv_draw_rect_dsc_init(&r);
         r.bg_color = KG_C_HAND;
@@ -90,7 +90,7 @@ static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
         lv_draw_rect(ctx, &r, &h2);
         break;
     }
-    case KG_ICON_SETTINGS: /* engrenage */
+    case KG_ICON_SETTINGS: /* gear */
         arc(ctx, 2, KG_C_HAND, cx, cy, 7, 0, 360);
         for (int k = 0; k < 8; k++) {
             float a = k * (float)M_PI / 4;
@@ -99,7 +99,7 @@ static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
         }
         arc(ctx, 2, KG_C_ACCENT, cx, cy, 2, 0, 360);
         break;
-    case KG_ICON_WEATHER: /* soleil derrière un nuage */
+    case KG_ICON_WEATHER: /* sun behind a cloud */
         arc(ctx, 2, KG_C_ACCENT, cx - 3, cy - 3, 6, 0, 360);
         arc(ctx, 2, KG_C_HAND, cx + 2, cy + 4, 7, 180, 360);
         line(ctx, &d, cx - 9, cy + 8, cx + 11, cy + 8);
@@ -116,7 +116,7 @@ static void icon_draw_cb(lv_event_t *e)
     draw_icon(lv_event_get_draw_ctx(e), app->icon, (a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
 }
 
-/* ------------------------------------------------------------------ lanceur */
+/* --------------------------------------------------------------- launcher */
 
 static void open_app_cb(lv_event_t *e)
 {
@@ -138,7 +138,7 @@ static lv_obj_t *launcher_create(void)
     lv_obj_t *scr = kit_screen();
     for (int i = 0; i < N_APPS; i++) {
         lv_coord_t cx = (i % 2) ? 176 : 64, cy = 42 + (i / 2) * 76;
-        /* Bouton rond façon sous-cadran : fond creusé, liseré, pictogramme. */
+        /* Round sub-dial-style button: recessed background, rim, pictogram. */
         lv_obj_t *b = lv_btn_create(scr);
         lv_obj_remove_style_all(b);
         lv_obj_set_size(b, 52, 52);
@@ -178,7 +178,7 @@ void ui_nav_open_launcher(void)
 void ui_nav_close_launcher(void)
 {
     s_in_launcher = false;
-    ui_faces_refresh_current(); /* applique aussi un cadran par défaut changé dans les Réglages */
+    ui_faces_refresh_current(); /* also applies a default face changed in Settings */
     kg_transition(ui_faces_screen(ui_faces_current()), KG_SLIDE_DOWN);
 }
 
@@ -224,7 +224,7 @@ void ui_nav_back(void)
 
 bool ui_nav_on_face(void) { return s_app < 0 && !s_in_launcher; }
 
-/* ----------------------------------------------------------------- alertes */
+/* ----------------------------------------------------------------- alerts */
 
 static lv_obj_t *s_alert, *s_alert_title, *s_alert_time, *s_alert_snooze;
 static lv_timer_t *s_ring_timer;
@@ -236,7 +236,7 @@ static void ring_once(void)
     static const uint16_t vib[] = {400, 200, 400, 600};
     hal_vibrate_pattern(vib, 4);
     if (s_alert_is_alarm) {
-        /* Carillon montant, synthétisé : tierce puis quinte. */
+        /* Rising synthesised chime: a third, then a fifth. */
         static const kg_tone_t chime[] = {{880, 120}, {0, 40}, {1109, 120}, {0, 40}, {1319, 260}, {0, 300}};
         hal_tones(chime, 6);
     } else {
@@ -256,8 +256,8 @@ static void stop_ringing(void)
 static void ring_tick(lv_timer_t *t)
 {
     (void)t;
-    lv_disp_trig_activity(NULL); /* l'écran reste allumé tant que ça sonne */
-    if (kg_tick_ms() - s_ring_started > 60000) { /* une minute sans réponse : répétition auto */
+    lv_disp_trig_activity(NULL); /* the screen stays on while it rings */
+    if (kg_tick_ms() - s_ring_started > 60000) { /* one minute without an answer: automatic snooze */
         if (s_alert_is_alarm) model_alarm_snooze();
         stop_ringing();
         return;
@@ -289,7 +289,7 @@ static void show_alert(bool alarm)
         lv_obj_align(s_alert_title, LV_ALIGN_TOP_MID, 0, 18);
         s_alert_time = kit_label(s_alert, &kg_font_digits_56, KG_C_TEXT, "");
         lv_obj_align(s_alert_time, LV_ALIGN_CENTER, 0, -8);
-        lv_obj_t *stop = kit_button(s_alert, "Arrêter", true, 104, 44, dismiss_cb, NULL);
+        lv_obj_t *stop = kit_button(s_alert, "Stop", true, 104, 44, dismiss_cb, NULL);
         lv_obj_align(stop, LV_ALIGN_BOTTOM_RIGHT, -10, -12);
         s_alert_snooze = kit_button(s_alert, "+5 min", false, 104, 44, snooze_cb, NULL);
         lv_obj_align(s_alert_snooze, LV_ALIGN_BOTTOM_LEFT, 10, -12);
@@ -298,7 +298,7 @@ static void show_alert(bool alarm)
     s_alert_is_alarm = alarm;
     struct tm now;
     hal_now(&now, NULL);
-    lv_label_set_text(s_alert_title, alarm ? "Réveil" : "Minuteur");
+    lv_label_set_text(s_alert_title, alarm ? "Alarm" : "Timer");
     if (alarm) lv_label_set_text_fmt(s_alert_time, "%02d:%02d", now.tm_hour, now.tm_min);
     else lv_label_set_text(s_alert_time, "00:00");
     if (alarm) lv_obj_clear_flag(s_alert_snooze, LV_OBJ_FLAG_HIDDEN);
@@ -315,20 +315,20 @@ static void show_alert(bool alarm)
 
 void ui_nav_test_alert(bool alarm) { show_alert(alarm); }
 
-/* Le shell : surveille le modèle et programme le prochain réveil matériel. Il ne tourne
- * qu'écran allumé : c'est là qu'il rafraîchit la météo de la complication si elle a plus de
- * 30 min (jamais de Wi-Fi écran éteint). */
+/* The shell: watches the model and schedules the next hardware wake-up. It only runs
+ * with the screen on, which is when it refreshes the complication's weather if it is more
+ * than 30 min old (never any Wi-Fi with the screen off). */
 #define WX_COMPLICATION_MAX_AGE_S (30 * 60)
 
 static void shell_tick(lv_timer_t *t)
 {
     static uint32_t n;
     (void)t;
-    if (n++ % 40 == 8) hal_weather_refresh(WX_COMPLICATION_MAX_AGE_S); /* toutes les 10 s */
+    if (n++ % 40 == 8) hal_weather_refresh(WX_COMPLICATION_MAX_AGE_S); /* every 10 s */
     kg_event_t ev = model_poll();
     if (ev == KG_EVT_ALARM) show_alert(true);
     else if (ev == KG_EVT_TIMER_DONE) show_alert(false);
-    else if (!s_return_to) ui_notif_poll(); /* pas de carte par-dessus une alarme qui sonne */
+    else if (!s_return_to) ui_notif_poll(); /* no card over a ringing alarm */
     hal_schedule_wakeup(model_next_event_time());
 }
 

@@ -48,7 +48,7 @@ lv_obj_t *kit_button(lv_obj_t *parent, const char *text, bool primary, lv_coord_
     lv_obj_set_style_bg_color(b, primary ? lv_color_darken(KG_C_ACCENT, 50) : KG_C_BTN_PRESS, LV_STATE_PRESSED);
     lv_obj_set_style_border_color(b, KG_C_HAIRLINE, 0);
     lv_obj_set_style_border_width(b, primary ? 0 : 1, 0);
-    lv_obj_set_style_transform_width(b, -2, LV_STATE_PRESSED); /* léger enfoncement */
+    lv_obj_set_style_transform_width(b, -2, LV_STATE_PRESSED); /* slight press-in */
     lv_obj_set_style_transform_height(b, -2, LV_STATE_PRESSED);
     lv_obj_t *l = kit_label(b, &kg_font_label_20, primary ? KG_C_BG : KG_C_TEXT, text);
     lv_obj_center(l);

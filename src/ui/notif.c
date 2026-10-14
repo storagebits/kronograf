@@ -1,7 +1,7 @@
 /*
- * Notifications iPhone : carte plein écran à l'arrivée (vibration), liste des dernières
- * notifications (glissé vers le bas depuis un cadran), écran de code d'appairage.
- * Tout est lu dans la HAL, sondée par le shell (nav.c) — aucun rappel depuis la pile BLE.
+ * iPhone notifications: full-screen card on arrival (with vibration), list of the latest
+ * notifications (swipe down from a face), pairing code screen. Everything is read from
+ * the HAL, polled by the shell (nav.c) — no callbacks from the BLE stack.
  */
 #include "notif.h"
 #include "faces.h"
@@ -18,11 +18,11 @@
 static lv_obj_t *s_card, *s_card_icon, *s_card_app, *s_card_title, *s_card_msg, *s_card_clear, *s_card_ok;
 static lv_obj_t *s_list_scr, *s_list, *s_list_state;
 static lv_obj_t *s_pair_scr, *s_pair_code;
-static lv_obj_t *s_return_to;        /* écran à retrouver après la carte ou l'appairage */
+static lv_obj_t *s_return_to;        /* screen to return to after the card or pairing */
 static uint32_t s_card_uid, s_seen_seq;
 static bool s_card_from_list;
 
-/* ------------------------------------------------------------ pictogrammes */
+/* ------------------------------------------------------------- pictograms */
 
 static void line(lv_draw_ctx_t *ctx, lv_color_t c, lv_coord_t w, lv_coord_t x1, lv_coord_t y1, lv_coord_t x2,
                  lv_coord_t y2)
@@ -49,23 +49,23 @@ static void frame(lv_draw_ctx_t *ctx, lv_color_t c, lv_coord_t x1, lv_coord_t y1
     lv_draw_rect(ctx, &d, &a);
 }
 
-/* Pictogramme de catégorie (≈ 20 px) centré en (cx, cy). */
+/* Category pictogram (≈ 20 px) centred on (cx, cy). */
 static void draw_category(lv_draw_ctx_t *ctx, uint8_t cat, lv_coord_t cx, lv_coord_t cy)
 {
     lv_color_t c = KG_C_ACCENT;
     switch (cat) {
-    case KG_CAT_SOCIAL: /* bulle de dialogue */
+    case KG_CAT_SOCIAL: /* speech bubble */
         frame(ctx, c, cx - 9, cy - 7, cx + 9, cy + 5, 5);
         line(ctx, c, 2, cx - 4, cy + 5, cx - 6, cy + 9);
         break;
-    case KG_CAT_EMAIL: /* enveloppe */
+    case KG_CAT_EMAIL: /* envelope */
         frame(ctx, c, cx - 9, cy - 6, cx + 9, cy + 6, 2);
         line(ctx, c, 2, cx - 8, cy - 5, cx, cy + 1);
         line(ctx, c, 2, cx + 8, cy - 5, cx, cy + 1);
         break;
     case KG_CAT_CALL:
     case KG_CAT_MISSED_CALL:
-    case KG_CAT_VOICEMAIL: { /* combiné : arc épais aux extrémités renflées */
+    case KG_CAT_VOICEMAIL: { /* handset: thick arc with swollen ends */
         lv_draw_arc_dsc_t a;
         lv_draw_arc_dsc_init(&a);
         a.color = cat == KG_CAT_MISSED_CALL ? KG_C_ALERT : c;
@@ -75,17 +75,17 @@ static void draw_category(lv_draw_ctx_t *ctx, uint8_t cat, lv_coord_t cx, lv_coo
         lv_draw_arc(ctx, &a, &center, 10, 100, 170);
         break;
     }
-    case KG_CAT_SCHEDULE: /* calendrier */
+    case KG_CAT_SCHEDULE: /* calendar */
         frame(ctx, c, cx - 8, cy - 6, cx + 8, cy + 8, 2);
         line(ctx, c, 2, cx - 7, cy - 2, cx + 7, cy - 2);
         line(ctx, c, 2, cx - 4, cy - 9, cx - 4, cy - 5);
         line(ctx, c, 2, cx + 4, cy - 9, cx + 4, cy - 5);
         break;
-    case KG_CAT_NEWS: /* page et lignes */
+    case KG_CAT_NEWS: /* page and lines */
         frame(ctx, c, cx - 8, cy - 8, cx + 8, cy + 8, 2);
         for (int i = 0; i < 3; i++) line(ctx, c, 2, cx - 4, cy - 3 + i * 4, cx + 4, cy - 3 + i * 4);
         break;
-    default: { /* cloche simplifiée : point plein */
+    default: { /* simplified bell: solid dot */
         lv_draw_rect_dsc_t d;
         lv_draw_rect_dsc_init(&d);
         d.bg_color = c;
@@ -121,7 +121,7 @@ static lv_obj_t *category_icon(lv_obj_t *parent, lv_coord_t size)
     return o;
 }
 
-/* « 20261012T171205 » → « 17:12 » (ou date courte si ce n'est pas aujourd'hui). */
+/* "20261012T171205" → "17:12" (or a short date when it is not today). */
 static void fmt_when(char *buf, size_t n, const char *date)
 {
     int y, mo, d, h, mi;
@@ -132,10 +132,10 @@ static void fmt_when(char *buf, size_t n, const char *date)
     struct tm now;
     hal_now(&now, NULL);
     if (now.tm_mday == d && now.tm_mon + 1 == mo) snprintf(buf, n, "%02d:%02d", ui_display_hour(h), mi);
-    else snprintf(buf, n, "%d/%02d %02d:%02d", d, mo, ui_display_hour(h), mi);
+    else snprintf(buf, n, "%d/%d %02d:%02d", mo, d, ui_display_hour(h), mi);
 }
 
-/* En-tête « MESSAGES · 17:12 » au pochoir : capitales ASCII et accents disponibles. */
+/* Stencilled "MESSAGES · 17:12" header: ASCII capitals plus the available accented ones. */
 static void fmt_header(char *buf, size_t n, const kg_notif_t *nt)
 {
     char app[40], when[16];
@@ -144,7 +144,7 @@ static void fmt_header(char *buf, size_t n, const kg_notif_t *nt)
     snprintf(buf, n, "%s   %s", name, when);
     for (char *c = buf; *c; c++) {
         if (*c >= 'a' && *c <= 'z') *c = (char)(*c - 32);
-        else if ((unsigned char)c[0] == 0xC3 && c[1]) { /* é è à ç ê î ô → capitales latin-1 */
+        else if ((unsigned char)c[0] == 0xC3 && c[1]) { /* é è à ç ê î ô → Latin-1 capitals */
             unsigned char lo = (unsigned char)c[1];
             if (lo >= 0xA0 && lo <= 0xBF) c[1] = (char)(lo - 0x20);
             c++;
@@ -152,7 +152,7 @@ static void fmt_header(char *buf, size_t n, const kg_notif_t *nt)
     }
 }
 
-/* ------------------------------------------------------------------ carte */
+/* ------------------------------------------------------------------- card */
 
 static void leave_to(lv_obj_t *back, kg_slide_t dir)
 {
@@ -178,7 +178,7 @@ static void card_ok_cb(lv_event_t *e)
 static void card_clear_cb(lv_event_t *e)
 {
     (void)e;
-    hal_notif_dismiss(s_card_uid); /* efface sur l'iPhone ; refuse un appel entrant */
+    hal_notif_dismiss(s_card_uid); /* clears it on the iPhone; declines an incoming call */
     card_close();
 }
 
@@ -205,7 +205,7 @@ static void card_create(void)
     lv_label_set_long_mode(s_card_title, LV_LABEL_LONG_DOT);
     lv_obj_set_pos(s_card_title, 10, 48);
 
-    /* Message : zone défilante si le texte est long. */
+    /* Message: scrolling area for long texts. */
     lv_obj_t *box = lv_obj_create(s_card);
     lv_obj_remove_style_all(box);
     lv_obj_set_size(box, 224, 116);
@@ -217,7 +217,7 @@ static void card_create(void)
     lv_label_set_long_mode(s_card_msg, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_line_space(s_card_msg, 2, 0);
 
-    s_card_clear = kit_button(s_card, "Effacer", false, 104, 40, card_clear_cb, NULL);
+    s_card_clear = kit_button(s_card, "Clear", false, 104, 40, card_clear_cb, NULL);
     lv_obj_align(s_card_clear, LV_ALIGN_BOTTOM_LEFT, 10, -6);
     s_card_ok = kit_button(s_card, "OK", true, 104, 40, card_ok_cb, NULL);
     lv_obj_align(s_card_ok, LV_ALIGN_BOTTOM_RIGHT, -10, -6);
@@ -238,7 +238,7 @@ static void card_show(const kg_notif_t *n, bool from_list)
     lv_label_set_text(s_card_msg, n->message);
     lv_obj_scroll_to_y(lv_obj_get_parent(s_card_msg), 0, LV_ANIM_OFF);
     bool call = n->category == KG_CAT_CALL;
-    kit_button_set_text(s_card_clear, call ? "Refuser" : "Effacer");
+    kit_button_set_text(s_card_clear, call ? "Decline" : "Clear");
     lv_obj_set_style_bg_color(s_card_clear, call ? KG_C_ALERT : KG_C_BTN, 0);
 
     if (lv_scr_act() != s_card) {
@@ -248,7 +248,7 @@ static void card_show(const kg_notif_t *n, bool from_list)
     }
 }
 
-/* ------------------------------------------------------------------ liste */
+/* ------------------------------------------------------------------- list */
 
 static void item_cb(lv_event_t *e)
 {
@@ -269,11 +269,11 @@ static void list_gesture(lv_event_t *e)
 static const char *ble_hint(void)
 {
     switch (hal_ble_state()) {
-    case KG_BLE_OFF: return "Notifications iPhone désactivées\n(Réglages de la montre)";
-    case KG_BLE_WAITING: return "iPhone non connecté.\nPour appairer, sur l'iPhone :\nRéglages, Bluetooth, « Kronograf »";
-    case KG_BLE_PAIRING: return "Appairage en cours…";
-    case KG_BLE_CONNECTED: return "Connexion à l'iPhone…";
-    default: return "Aucune notification";
+    case KG_BLE_OFF: return "iPhone notifications are off\n(watch Settings)";
+    case KG_BLE_WAITING: return "iPhone not connected.\nTo pair, connect to “Kronograf”\nfrom an app like nRF Connect";
+    case KG_BLE_PAIRING: return "Pairing…";
+    case KG_BLE_CONNECTED: return "Connecting to the iPhone…";
+    default: return "No notifications";
     }
 }
 
@@ -282,7 +282,7 @@ static void list_fill(void)
     lv_obj_clean(s_list);
     int n = hal_notif_count();
     kg_ble_state_t st = hal_ble_state();
-    lv_label_set_text(s_list_state, st == KG_BLE_READY ? "IPHONE CONNECTÉ" : st == KG_BLE_OFF ? "BLUETOOTH COUPÉ" : "IPHONE HORS LIGNE");
+    lv_label_set_text(s_list_state, st == KG_BLE_READY ? "IPHONE CONNECTED" : st == KG_BLE_OFF ? "BLUETOOTH OFF" : "IPHONE OFFLINE");
     lv_obj_set_style_text_color(s_list_state, st == KG_BLE_READY ? KG_C_OK : KG_C_TEXT_DIM, 0);
     if (!n) {
         lv_obj_t *l = kit_label(s_list, &kg_font_text_16, KG_C_TEXT_DIM, ble_hint());
@@ -351,14 +351,14 @@ void ui_notif_open_list(void)
     if (!kg_transition(s_list_scr, from_card ? KG_SLIDE_RIGHT : KG_SLIDE_DOWN)) lv_scr_load(s_list_scr);
 }
 
-/* -------------------------------------------------------------- appairage */
+/* ---------------------------------------------------------------- pairing */
 
 static void pair_show(void)
 {
     if (!s_pair_scr) {
         s_pair_scr = kit_screen();
-        kit_title(s_pair_scr, "APPAIRAGE IPHONE");
-        lv_obj_t *l = kit_label(s_pair_scr, &kg_font_text_16, KG_C_TEXT_DIM, "Saisissez ce code\nsur l'iPhone");
+        kit_title(s_pair_scr, "IPHONE PAIRING");
+        lv_obj_t *l = kit_label(s_pair_scr, &kg_font_text_16, KG_C_TEXT_DIM, "Enter this code\non the iPhone");
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 40);
         s_pair_code = kit_label(s_pair_scr, &kg_font_digits_56, KG_C_ACCENT, "");
@@ -373,14 +373,14 @@ static void pair_show(void)
     }
 }
 
-/* ------------------------------------------------------------------ sonde */
+/* ---------------------------------------------------------------- polling */
 
 void ui_notif_poll(void)
 {
     if (kg_transition_running()) return;
     lv_obj_t *act = lv_scr_act();
 
-    /* Appairage : le code reste affiché tant que l'iPhone le demande. */
+    /* Pairing: the code stays on screen as long as the iPhone asks for it. */
     bool pairing = hal_ble_state() == KG_BLE_PAIRING;
     if (pairing && act != s_pair_scr) {
         pair_show();
@@ -406,7 +406,7 @@ void ui_notif_poll(void)
         }
         return;
     }
-    if (act == s_list_scr) { /* liste ouverte : suit les ajouts et retraits */
+    if (act == s_list_scr) { /* list open: follows additions and removals */
         static int last_n = -1;
         static kg_ble_state_t last_st;
         int n = hal_notif_count();

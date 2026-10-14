@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define MAX_DIGITS 8
-#define SLANT 0.09f /* inclinaison vers la droite, en px de x par px de y */
+#define SLANT 0.09f /* rightward slant, in px of x per px of y */
 
 /* Segments a..g, bit 0 = a. */
 static const uint8_t GLYPHS[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
@@ -15,16 +15,16 @@ typedef struct {
     lv_coord_t dw, dh, gap, colon_w;
     lv_color_t color;
     uint8_t mask[MAX_DIGITS];
-    uint8_t flicker[MAX_DIGITS]; /* 0..255 : intensité de scintillement des segments nouvellement allumés */
-    uint8_t fresh[MAX_DIGITS];   /* segments allumés depuis la dernière valeur */
+    uint8_t flicker[MAX_DIGITS]; /* 0..255: flicker intensity of newly lit segments */
+    uint8_t fresh[MAX_DIGITS];   /* segments lit since the previous value */
     bool colon;
 } seg7_t;
 
-/* ------------------------------------------------------------ géométrie */
+/* ------------------------------------------------------------- geometry */
 
 typedef struct { float x, y; } fpt;
 
-/* Hexagone d'un segment entre p0 et p1 (horizontal ou vertical), épaisseur t. */
+/* Hexagon of a segment from p0 to p1 (horizontal or vertical), thickness t. */
 static int segment_poly(fpt p0, fpt p1, float t, float grow, lv_point_t *out, lv_coord_t ox, lv_coord_t oy, float h)
 {
     float half = t / 2 + grow;
@@ -56,8 +56,8 @@ static int segment_poly(fpt p0, fpt p1, float t, float grow, lv_point_t *out, lv
 static void digit_segments(const seg7_t *s, fpt seg[7][2], float *t)
 {
     float w = s->dw, h = s->dh;
-    float th = w * 0.17f;  /* épaisseur */
-    float g = th * 0.22f;  /* jour entre segments */
+    float th = w * 0.17f;  /* thickness */
+    float g = th * 0.22f;  /* gap between segments */
     float x0 = th / 2 + 1, x1 = w - th / 2 - 1 - h * SLANT;
     float y0 = th / 2, ym = h / 2, y1 = h - th / 2;
     *t = th;
@@ -110,16 +110,16 @@ static void draw_cb(lv_event_t *e)
                 draw_poly(ctx, p, off, LV_OPA_COVER);
                 continue;
             }
-            /* Segment nouvellement allumé : intensité modulée par le scintillement. */
+            /* Newly lit segment: intensity modulated by the flicker. */
             uint8_t level = (s->fresh[i] & (1 << k)) ? s->flicker[i] : 255;
             lv_color_t lit = lv_color_mix(s->color, off, level);
             segment_poly(seg[k][0], seg[k][1], t, 2.5f, p, ox, oy, s->dh); /* halo large */
             draw_poly(ctx, p, s->color, (lv_opa_t)(level * 14 / 255));
-            segment_poly(seg[k][0], seg[k][1], t, 1.2f, p, ox, oy, s->dh); /* halo serré */
+            segment_poly(seg[k][0], seg[k][1], t, 1.2f, p, ox, oy, s->dh); /* tight glow */
             draw_poly(ctx, p, s->color, (lv_opa_t)(level * 40 / 255));
             segment_poly(seg[k][0], seg[k][1], t, 0, p, ox, oy, s->dh);
             draw_poly(ctx, p, lit, LV_OPA_COVER);
-            /* Cœur plus clair : filament qui chauffe. */
+            /* Brighter core: a filament warming up. */
             segment_poly(seg[k][0], seg[k][1], t * 0.35f, 0, p, ox, oy, s->dh);
             draw_poly(ctx, p, lv_color_mix(lv_color_white(), lit, 70), (lv_opa_t)(level * 160 / 255));
         }
@@ -149,7 +149,7 @@ static void draw_cb(lv_event_t *e)
 static void flicker_cb(void *var, int32_t v)
 {
     seg7_t *s = var;
-    /* Courbe d'allumage : deux sursauts puis pleine intensité (≈ 180 ms). */
+    /* Ignition curve: two jolts, then full intensity (≈ 180 ms). */
     static const uint8_t curve[] = {40, 200, 70, 230, 150, 255};
     uint8_t level = curve[v * (sizeof curve - 1) / 1000];
     for (int i = 0; i < s->n; i++)
@@ -164,7 +164,7 @@ static void flicker_done(lv_anim_t *a)
     lv_obj_invalidate(s->obj);
 }
 
-/* Le halo déborde de quelques pixels de la boîte. */
+/* The glow spills a few pixels outside the box. */
 static void ext_size_cb(lv_event_t *e) { lv_event_set_ext_draw_size(e, 4); }
 
 static void delete_cb(lv_event_t *e)

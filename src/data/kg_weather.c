@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Lecteur JSON minimal, suffisant pour la réponse Open-Meteo (pas de chaînes contenant
- * des accolades, structure connue) : on localise une section puis des clés dedans. */
+/* Minimal JSON reader, enough for the Open-Meteo response (no strings containing braces,
+ * known structure): find a section, then keys inside it. */
 
 typedef struct {
     const char *p, *end;
 } span_t;
 
-/* Section `"name":{…}` (ou `[…]`) de premier niveau dans `in`. */
+/* Top-level `"name":{…}` (or `[…]`) section in `in`. */
 static bool section(span_t in, const char *name, span_t *out)
 {
     char pat[48];
@@ -46,7 +46,7 @@ static bool number(span_t in, const char *key, double *v)
     return false;
 }
 
-/* Tableau de nombres `"key":[…]` ; retourne le nombre de valeurs lues (≤ max). */
+/* Number array `"key":[…]`; returns how many values were read (≤ max). */
 static int numbers(span_t in, const char *key, double *v, int max)
 {
     span_t arr;
@@ -56,7 +56,7 @@ static int numbers(span_t in, const char *key, double *v, int max)
     while (p < arr.end && k < max) {
         char *e;
         double x = strtod(p, &e);
-        if (e == p) { /* null ou séparateur */
+        if (e == p) { /* null or separator */
             if (!strncmp(p, "null", 4)) {
                 x = 0;
                 e = (char *)p + 4;
@@ -119,25 +119,25 @@ bool kg_weather_parse(const char *json, size_t len, kg_weather_t *out)
 
 const char *kg_weather_label(uint8_t c)
 {
-    if (c == 0) return "Dégagé";
-    if (c == 1) return "Peu nuageux";
-    if (c == 2) return "Éclaircies";
-    if (c == 3) return "Couvert";
-    if (c == 45 || c == 48) return "Brouillard";
-    if (c >= 51 && c <= 55) return "Bruine";
-    if (c == 56 || c == 57) return "Bruine verglaçante";
-    if (c == 61) return "Pluie faible";
-    if (c == 63) return "Pluie";
-    if (c == 65) return "Forte pluie";
-    if (c == 66 || c == 67) return "Pluie verglaçante";
-    if (c == 71) return "Neige faible";
-    if (c == 73) return "Neige";
-    if (c == 75) return "Forte neige";
-    if (c == 77) return "Grésil";
-    if (c >= 80 && c <= 82) return "Averses";
-    if (c == 85 || c == 86) return "Averses de neige";
-    if (c == 95) return "Orage";
-    if (c == 96 || c == 99) return "Orage et grêle";
+    if (c == 0) return "Clear";
+    if (c == 1) return "Mostly clear";
+    if (c == 2) return "Partly cloudy";
+    if (c == 3) return "Overcast";
+    if (c == 45 || c == 48) return "Fog";
+    if (c >= 51 && c <= 55) return "Drizzle";
+    if (c == 56 || c == 57) return "Freezing drizzle";
+    if (c == 61) return "Light rain";
+    if (c == 63) return "Rain";
+    if (c == 65) return "Heavy rain";
+    if (c == 66 || c == 67) return "Freezing rain";
+    if (c == 71) return "Light snow";
+    if (c == 73) return "Snow";
+    if (c == 75) return "Heavy snow";
+    if (c == 77) return "Snow grains";
+    if (c >= 80 && c <= 82) return "Showers";
+    if (c == 85 || c == 86) return "Snow showers";
+    if (c == 95) return "Thunderstorm";
+    if (c == 96 || c == 99) return "Thunderstorm, hail";
     return "—";
 }
 

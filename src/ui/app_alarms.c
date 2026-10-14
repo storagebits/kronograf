@@ -1,6 +1,6 @@
 /*
- * App Alarmes : quatre alarmes quotidiennes, persistantes (NVS). Toucher l'heure ouvre
- * le réglage à deux rouleaux ; l'interrupteur active ou désactive.
+ * Alarms app: four daily alarms, persisted in NVS. Tapping a time opens the two-roller
+ * editor; the switch enables or disables the alarm.
  */
 #include "nav.h"
 #include "kit.h"
@@ -50,7 +50,7 @@ static void ok_cb(lv_event_t *e)
     kg_alarm_t a = model_alarm_get(s_editing);
     a.hour = (uint8_t)lv_roller_get_selected(s_roll_h);
     a.min = (uint8_t)lv_roller_get_selected(s_roll_m);
-    a.enabled = true; /* régler une alarme, c'est vouloir qu'elle sonne */
+    a.enabled = true; /* setting an alarm means wanting it to ring */
     model_alarm_set(s_editing, a);
     lv_obj_add_flag(s_editor, LV_OBJ_FLAG_HIDDEN);
     s_editing = -1;
@@ -80,7 +80,7 @@ static lv_obj_t *roller(lv_obj_t *parent, int count)
 static lv_obj_t *create(void)
 {
     lv_obj_t *scr = kit_screen();
-    kit_title(scr, "ALARMES");
+    kit_title(scr, "ALARMS");
 
     for (int i = 0; i < KG_MAX_ALARMS; i++) {
         lv_coord_t y = 26 + i * 52;
@@ -108,14 +108,14 @@ static lv_obj_t *create(void)
         lv_obj_add_event_cb(s_sw[i], switch_cb, LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)i);
     }
 
-    /* Réglage : panneau plein écran par-dessus la liste. */
+    /* Editor: full-screen panel over the list. */
     s_editor = lv_obj_create(scr);
     lv_obj_remove_style_all(s_editor);
     lv_obj_set_size(s_editor, KG_W, KG_H);
     lv_obj_set_style_bg_color(s_editor, KG_C_BG, 0);
     lv_obj_set_style_bg_opa(s_editor, LV_OPA_COVER, 0);
     lv_obj_add_flag(s_editor, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t *t = kit_label(s_editor, &kg_font_stencil_11, KG_C_TEXT_DIM, "HEURE DU RÉVEIL");
+    lv_obj_t *t = kit_label(s_editor, &kg_font_stencil_11, KG_C_TEXT_DIM, "WAKE-UP TIME");
     lv_obj_set_style_text_letter_space(t, 2, 0);
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 6);
     s_roll_h = roller(s_editor, 24);
@@ -124,7 +124,7 @@ static lv_obj_t *create(void)
     lv_obj_align(s_roll_m, LV_ALIGN_TOP_MID, 46, 26);
     lv_obj_t *colon = kit_label(s_editor, &kg_font_digits_30, KG_C_TEXT, ":");
     lv_obj_align(colon, LV_ALIGN_TOP_MID, 0, 72);
-    lv_obj_t *ok = kit_button(s_editor, "Valider", true, 140, 44, ok_cb, NULL);
+    lv_obj_t *ok = kit_button(s_editor, "Set", true, 140, 44, ok_cb, NULL);
     lv_obj_align(ok, LV_ALIGN_BOTTOM_MID, 0, -12);
 
     refresh();
@@ -139,7 +139,7 @@ static void on_show(void)
 
 const kg_app_t kg_app_alarms = {
     .name = "alarms",
-    .label = "Alarmes",
+    .label = "Alarms",
     .icon = KG_ICON_ALARM,
     .create = create,
     .on_show = on_show,

@@ -13,7 +13,7 @@ static bool snapshot(lv_obj_t *scr, uint8_t *buf, lv_img_dsc_t *dsc)
     return lv_snapshot_take_to_buf(scr, LV_IMG_CF_TRUE_COLOR, dsc, buf, size) == LV_RES_OK;
 }
 
-static void exec_cb(void *var, int32_t p) /* p : 0..1000 */
+static void exec_cb(void *var, int32_t p) /* p: 0..1000 */
 {
     (void)var;
     bool horiz = s_dir == KG_SLIDE_LEFT || s_dir == KG_SLIDE_RIGHT;

@@ -1,4 +1,4 @@
-/* Notifications iPhone : carte à l'arrivée, liste, écran d'appairage (voir notif.c). */
+/* iPhone notifications: card on arrival, list, pairing screen (see notif.c). */
 #pragma once
 #include "lvgl.h"
 
@@ -7,8 +7,8 @@ extern "C" {
 #endif
 
 void ui_notif_init(void);
-void ui_notif_poll(void);       /* appelé par le shell, écran allumé */
-void ui_notif_open_list(void);  /* glissé vers le bas depuis un cadran */
+void ui_notif_poll(void);       /* called by the shell while the screen is on */
+void ui_notif_open_list(void);  /* swipe down from a face */
 
 #ifdef __cplusplus
 }

@@ -1,9 +1,9 @@
 /*
- * Simulateur Kronograf : même UI LVGL que la montre, rendue dans une fenêtre SDL2.
+ * Kronograf simulator: the watch's LVGL UI, rendered in an SDL2 window.
  *
- *   kronograf_sim                       fenêtre interactive (souris = doigt), échelle ×3
- *   kronograf_sim --shot out.png        rendu headless d'une image puis sortie
- *   kronograf_sim --scale 2             change l'échelle de la fenêtre
+ *   kronograf_sim                       interactive window (mouse = finger), ×3 scale
+ *   kronograf_sim --shot out.png        headless render of one frame, then exit
+ *   kronograf_sim --scale 2             changes the window scale
  */
 #include "lvgl.h"
 #include "../src/ui/ui.h"
@@ -21,8 +21,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb_image_write.h"
 
-static lv_color_t s_fb[KG_W * KG_H];      /* image complète de l'écran */
-static lv_color_t s_buf[KG_W * 40];       /* tampon partiel, comme sur la montre */
+static lv_color_t s_fb[KG_W * KG_H];      /* full screen image */
+static lv_color_t s_buf[KG_W * 40];       /* partial buffer, as on the watch */
 static int s_mouse_x, s_mouse_y, s_mouse_down;
 static int s_scale = 3;
 
@@ -109,13 +109,13 @@ int main(int argc, char **argv)
     }
 
     if (shot) {
-        /* Laisse tourner les animations d'apparition (scintillement des segments) avant la capture. */
+        /* Let the entrance animations (segment flicker) run before the capture. */
         uint32_t until = SDL_GetTicks() + (getenv("KG_SETTLE_MS") ? atoi(getenv("KG_SETTLE_MS")) : 400);
         uint32_t t0 = SDL_GetTicks();
         int laps = 0;
         while (SDL_GetTicks() < until) {
             lv_timer_handler();
-            /* Démo : deux tours de chrono pendant l'attente. */
+            /* Demo: two stopwatch laps while waiting. */
             if (getenv("KG_DEMO") && laps < 2 && SDL_GetTicks() - t0 > 300u + 500u * laps) {
                 model_chrono_lap();
                 laps++;
@@ -132,11 +132,11 @@ int main(int argc, char **argv)
         }
         lv_refr_now(NULL);
         int rc = write_png(shot);
-        printf("%s %s\n", rc ? "ECHEC" : "capture", shot);
+        printf("%s %s\n", rc ? "FAILED" : "screenshot", shot);
         return rc;
     }
 
-    SDL_Window *win = SDL_CreateWindow("Kronograf — simulateur", SDL_WINDOWPOS_CENTERED,
+    SDL_Window *win = SDL_CreateWindow("Kronograf — simulator", SDL_WINDOWPOS_CENTERED,
                                        SDL_WINDOWPOS_CENTERED, KG_W * s_scale, KG_H * s_scale, 0);
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, KG_W, KG_H);

@@ -8,7 +8,7 @@ static const kg_face_t *const FACES[] = {&kg_face_aviator, &kg_face_circuits, &k
 
 static lv_obj_t *s_screens[N_FACES];
 static int s_current = -1;
-static int s_current_default_pending = -1; /* appliqué au retour sur les cadrans */
+static int s_current_default_pending = -1; /* applied when returning to the faces */
 
 static void gesture_cb(lv_event_t *e);
 
@@ -22,9 +22,9 @@ static lv_obj_t *screen_of(int n)
     return s_screens[n];
 }
 
-/* ---------------------------------------------------- réglage mémorisé
- * Le cadran choisi n'est écrit en NVS qu'après 5 s d'affichage : pas d'écriture flash
- * pendant les transitions (cache coupé, rendu bloqué) ni d'usure à chaque glissé. */
+/* ------------------------------------------------------------ saved setting
+ * The chosen face is written to NVS only after 5 s on screen: no flash write during
+ * transitions (cache disabled, rendering stalled) and no wear on every swipe. */
 
 static lv_timer_t *s_save_timer;
 
@@ -41,7 +41,7 @@ static void schedule_save(void)
     lv_timer_resume(s_save_timer);
 }
 
-/* Changements de cadran pendant une transition : mis en file (cf. transition.h). */
+/* Face changes during a transition are queued (see transition.h). */
 static int s_pending = -1;
 static bool s_pending_anim;
 static lv_timer_t *s_pending_timer;
@@ -68,7 +68,7 @@ void ui_faces_show(int n, bool animate)
     if (n == s_current) return;
     int prev = s_current;
     lv_obj_t *scr = screen_of(n);
-    FACES[n]->set_active(true); /* contenu à jour avant l'instantané */
+    FACES[n]->set_active(true); /* content up to date before the snapshot */
     if (prev >= 0) FACES[prev]->set_active(false);
 
     bool forward = prev >= 0 && (n - prev + N_FACES) % N_FACES == 1;
@@ -104,7 +104,7 @@ lv_obj_t *ui_faces_screen(int n) { return screen_of(n); }
 
 void ui_faces_set_visible(bool visible)
 {
-    if (visible && s_current_default_pending >= 0) { /* cadran par défaut changé dans les Réglages */
+    if (visible && s_current_default_pending >= 0) { /* default face changed in Settings */
         int n = s_current_default_pending;
         s_current_default_pending = -1;
         if (n != s_current) {
@@ -115,7 +115,7 @@ void ui_faces_set_visible(bool visible)
     }
     if (s_current >= 0) FACES[s_current]->set_active(visible);
     if (visible) hal_brightness_scale(FACES[s_current]->brightness_pct);
-    else hal_brightness_scale(100); /* le cadran Nuit tamise ; pas les apps */
+    else hal_brightness_scale(100); /* the Night face dims; apps do not */
 }
 
 static int s_fmt24 = -1;
@@ -130,7 +130,7 @@ void ui_set_fmt24(bool on)
 {
     s_fmt24 = on;
     hal_setting_set("fmt24", on);
-    for (int i = 0; i < N_FACES; i++) /* forcer le redessin des heures */
+    for (int i = 0; i < N_FACES; i++) /* force the hours to redraw */
         if (s_screens[i] && i == s_current) {
             FACES[i]->set_active(false);
             FACES[i]->set_active(true);

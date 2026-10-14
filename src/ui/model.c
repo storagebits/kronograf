@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ------------------------------------------------------------ chronomètre */
+/* -------------------------------------------------------------- stopwatch */
 
-static uint32_t s_chrono_base;   /* temps cumulé avant le dernier départ */
-static uint32_t s_chrono_t0;     /* tick du dernier départ */
+static uint32_t s_chrono_base;   /* accumulated time before the last start */
+static uint32_t s_chrono_t0;     /* tick of the last start */
 static bool s_chrono_running;
 static uint32_t s_laps[KG_MAX_LAPS];
 static int s_nlaps;
@@ -51,13 +51,13 @@ int model_chrono_laps(uint32_t out[KG_MAX_LAPS])
     return s_nlaps;
 }
 
-/* --------------------------------------------------------------- minuteur
- * Échéance en heure murale (time_t) pour survivre au sommeil léger. */
+/* ------------------------------------------------------------------ timer
+ * Deadline kept in wall-clock time (time_t) so it survives light sleep. */
 
 static uint32_t s_timer_duration = 5 * 60 * 1000;
-static uint32_t s_timer_left;      /* en pause */
-static time_t s_timer_end;         /* en marche (s) */
-static uint32_t s_timer_end_ms;    /* partie ms de l'échéance */
+static uint32_t s_timer_left;      /* while paused */
+static time_t s_timer_end;         /* while running (s) */
+static uint32_t s_timer_end_ms;    /* ms part of the deadline */
 static kg_timer_state_t s_timer_state = KG_TIMER_IDLE;
 static bool s_timer_fired;
 
@@ -113,19 +113,19 @@ kg_timer_state_t model_timer_state(void)
     return s_timer_state;
 }
 
-/* ---------------------------------------------------------------- alarmes
- * Réglage NVS « alN » = actif << 16 | heure << 8 | minute. */
+/* ----------------------------------------------------------------- alarms
+ * NVS setting "alN" = enabled << 16 | hour << 8 | minute. */
 
 static kg_alarm_t s_alarms[KG_MAX_ALARMS];
-static time_t s_snooze_at;        /* répétition en attente (0 = aucune) */
-static time_t s_last_fired_min;   /* minute (time_t / 60) déjà sonnée */
+static time_t s_snooze_at;        /* pending snooze (0 = none) */
+static time_t s_last_fired_min;   /* minute (time_t / 60) already rung */
 
 void model_alarms_load(void)
 {
     for (int i = 0; i < KG_MAX_ALARMS; i++) {
         char key[8];
         snprintf(key, sizeof key, "al%d", i);
-        int32_t v = hal_setting_get(key, (7 << 8) | (i * 15)); /* défaut : 7 h 00, 7 h 15… inactives */
+        int32_t v = hal_setting_get(key, (7 << 8) | (i * 15)); /* defaults: 7:00, 7:15… disabled */
         s_alarms[i] = (kg_alarm_t){.enabled = (v >> 16) & 1, .hour = (v >> 8) & 0xFF, .min = v & 0xFF};
     }
 }
@@ -140,7 +140,7 @@ void model_alarm_set(int i, kg_alarm_t a)
     hal_setting_set(key, (a.enabled ? 1 << 16 : 0) | (a.hour << 8) | a.min);
 }
 
-/* Prochaine occurrence (time_t) d'une alarme quotidienne, strictement après `after`. */
+/* Next occurrence (time_t) of a daily alarm, strictly after `after`. */
 static time_t next_occurrence(kg_alarm_t a, time_t after)
 {
     struct tm t;
@@ -164,7 +164,7 @@ static time_t next_alarm_time(void)
     if (s_snooze_at > now) best = s_snooze_at;
     for (int i = 0; i < KG_MAX_ALARMS; i++) {
         if (!s_alarms[i].enabled) continue;
-        time_t w = next_occurrence(s_alarms[i], now - 59); /* la minute en cours compte encore */
+        time_t w = next_occurrence(s_alarms[i], now - 59); /* the current minute still counts */
         if (!best || w < best) best = w;
     }
     return best;
@@ -182,7 +182,7 @@ void model_alarm_snooze(void) { s_snooze_at = time(NULL) + 5 * 60; }
 
 void model_alarm_dismiss(void) { s_snooze_at = 0; }
 
-/* --------------------------------------------------------------- événements */
+/* ----------------------------------------------------------------- events */
 
 kg_event_t model_poll(void)
 {

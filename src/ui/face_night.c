@@ -1,7 +1,6 @@
 /*
- * Cadran 3 — « Nuit » : l'heure seule, en grands chiffres rouge sombre, rétroéclairage
- * réduit. Une mise à jour par minute : le cadran le plus sobre en énergie.
- * Choix justifié dans DECISIONS.md (D19).
+ * Face 3 — "Night": the time alone, in large dark-red digits, dimmed backlight.
+ * One update per minute: the most power-frugal face. Rationale in DECISIONS.md (D19).
  */
 #include "faces.h"
 #include "theme.h"
@@ -53,7 +52,7 @@ static lv_obj_t *create(void)
 }
 
 const kg_face_t kg_face_night = {
-    .name = "nuit",
+    .name = "night",
     .create = create,
     .set_active = set_active,
     .brightness_pct = KG_NIGHT_BRIGHTNESS_PCT,

@@ -6,7 +6,7 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 find_package(SDL2 REQUIRED)
 
-# LVGL : compilée avec le même lv_conf.h que la montre (KG_SIM désactive le swap RGB565).
+# LVGL: built with the watch's lv_conf.h (KG_SIM disables the RGB565 byte swap).
 file(GLOB_RECURSE LVGL_SRC ${ROOT}/lib/lvgl/src/*.c)
 add_library(lvgl STATIC ${LVGL_SRC})
 target_include_directories(lvgl PUBLIC ${ROOT}/lib/lvgl ${ROOT}/include)
@@ -19,6 +19,6 @@ add_executable(kronograf_sim main.c ${ROOT}/src/hal/sim/hal_sim.c ${UI_SRC} ${DA
 target_compile_definitions(kronograf_sim PRIVATE KG_ROOT="${ROOT}")
 target_include_directories(kronograf_sim PRIVATE ${ROOT}/src ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(kronograf_sim PRIVATE lvgl SDL2::SDL2)
-# Notre code compile sans avertissement (les polices générées sont exclues du -Werror).
+# Our code builds warning-free (generated fonts are excluded from -Werror).
 file(GLOB UI_OWN ${ROOT}/src/ui/*.c)
 set_source_files_properties(main.c ${ROOT}/src/hal/sim/hal_sim.c ${UI_OWN} ${DATA_SRC} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")

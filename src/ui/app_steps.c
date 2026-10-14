@@ -1,6 +1,6 @@
 /*
- * App Pas : compte du jour dans un anneau d'objectif (10 000), histogramme des 7 jours
- * (6 jours d'historique NVS + aujourd'hui en orange).
+ * Steps app: today's count in a goal ring (10,000), and a 7-day bar chart
+ * (6 days of NVS history + today in orange).
  */
 #include "nav.h"
 #include "kit.h"
@@ -12,28 +12,28 @@
 #define BAR_W 20
 #define BAR_GAP 9
 #define BAR_MAX_H 62
-#define BARS_Y 214 /* base des barres */
+#define BARS_Y 214 /* bar baseline */
 
 static lv_obj_t *s_arc, *s_count, *s_bars[7], *s_days[7], *s_goal;
 static lv_timer_t *s_timer;
 
-static const char *const INITIALS[] = {"D", "L", "M", "M", "J", "V", "S"};
+static const char *const INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
 
 static void refresh(void)
 {
     uint32_t today = hal_steps_today(), hist[7], vals[7], top = KG_STEPS_GOAL;
     hal_steps_history(hist);
-    for (int i = 0; i < 6; i++) vals[i] = hist[5 - i]; /* il y a 6 jours … hier */
+    for (int i = 0; i < 6; i++) vals[i] = hist[5 - i]; /* 6 days ago … yesterday */
     vals[6] = today;
     for (int i = 0; i < 7; i++)
         if (vals[i] > top) top = vals[i];
 
     char buf[16];
-    if (today >= 1000) snprintf(buf, sizeof buf, "%lu %03lu", (unsigned long)(today / 1000), (unsigned long)(today % 1000));
+    if (today >= 1000) snprintf(buf, sizeof buf, "%lu,%03lu", (unsigned long)(today / 1000), (unsigned long)(today % 1000));
     else snprintf(buf, sizeof buf, "%lu", (unsigned long)today);
     lv_label_set_text(s_count, buf);
     lv_arc_set_value(s_arc, (int16_t)(today > KG_STEPS_GOAL ? 1000 : today * 1000 / KG_STEPS_GOAL));
-    lv_label_set_text(s_goal, today >= KG_STEPS_GOAL ? "OBJECTIF ATTEINT" : "OBJECTIF 10 000");
+    lv_label_set_text(s_goal, today >= KG_STEPS_GOAL ? "GOAL REACHED" : "GOAL 10,000");
     lv_obj_set_style_text_color(s_goal, today >= KG_STEPS_GOAL ? KG_C_OK : KG_C_TEXT_DIM, 0);
 
     struct tm now;
@@ -56,7 +56,7 @@ static void tick(lv_timer_t *t)
 static lv_obj_t *create(void)
 {
     lv_obj_t *scr = kit_screen();
-    kit_title(scr, "PAS");
+    kit_title(scr, "STEPS");
 
     s_arc = lv_arc_create(scr);
     lv_obj_set_size(s_arc, 116, 116);
@@ -76,7 +76,7 @@ static lv_obj_t *create(void)
     lv_obj_set_style_text_align(s_count, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align_to(s_count, s_arc, LV_ALIGN_CENTER, 0, -4);
     s_goal = kit_label(scr, &kg_font_stencil_11, KG_C_TEXT_DIM, "");
-    lv_obj_set_width(s_goal, 140); /* largeur fixe : le texte change, le centrage tient */
+    lv_obj_set_width(s_goal, 140); /* fixed width: the text changes, the centring holds */
     lv_obj_set_style_text_align(s_goal, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align_to(s_goal, s_arc, LV_ALIGN_BOTTOM_MID, 0, 2);
 
@@ -111,7 +111,7 @@ static void on_hide(void) { lv_timer_pause(s_timer); }
 
 const kg_app_t kg_app_steps = {
     .name = "steps",
-    .label = "Pas",
+    .label = "Steps",
     .icon = KG_ICON_STEPS,
     .create = create,
     .on_show = on_show,

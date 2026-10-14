@@ -1,13 +1,13 @@
 /*
- * Cadran 2 — « Circuits temporels ».
+ * Face 2 — "Time circuits".
  *
- * Trois lignes d'afficheurs 7 segments, chacune avec ses étiquettes au pochoir :
- *   rouge  DESTINATION       prochaine alarme (tirets s'il n'y en a pas)
- *   vert   PRÉSENT           date et heure courantes, « : » qui bat la seconde
- *   ambre  DERNIÈRE SYNCHRO  dernière synchronisation NTP
+ * Three rows of 7-segment displays, each with stencilled labels:
+ *   red    DESTINATION TIME    next alarm (dashes when there is none)
+ *   green  PRESENT TIME        current date and time, ':' beating the seconds
+ *   amber  LAST TIME DEPARTED  last NTP synchronisation
  *
- * Easter egg : appui long sur la ligne verte, ou 10 000 pas franchis → décharge
- * électrique (éclairs animés).
+ * Easter egg: long press on the green row, or 10,000 steps reached → electrical
+ * discharge (animated lightning).
  */
 #include "ui.h"
 #include "faces.h"
@@ -47,7 +47,7 @@ static lv_obj_t *stencil(lv_obj_t *parent, const char *txt, lv_color_t color)
     return l;
 }
 
-/* Petite plaque d'étiquette au-dessus d'un groupe d'afficheurs. */
+/* Small label plate above a display group. */
 static void plate(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, const char *txt)
 {
     lv_obj_t *p = lv_obj_create(parent);
@@ -89,15 +89,15 @@ static lv_obj_t *group(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t 
 
 static lv_obj_t *row(lv_obj_t *parent, lv_coord_t y, lv_color_t color, const char *title, row_t *r)
 {
-    const lv_coord_t x_day = 8, x_month = 62, x_time = 116, w2 = 50, w4 = 116;
-    plate(parent, x_day, y, w2, "JOUR");
-    plate(parent, x_month, y, w2, "MOIS");
-    plate(parent, x_time, y, w4, "HEURE   MIN");
+    const lv_coord_t x_month = 8, x_day = 62, x_time = 116, w2 = 50, w4 = 116;
+    plate(parent, x_month, y, w2, "MONTH");
+    plate(parent, x_day, y, w2, "DAY");
+    plate(parent, x_time, y, w4, "HOUR   MIN");
     r->day = group(parent, x_day, y + 15, w2, 2, -1, color);
     r->month = group(parent, x_month, y + 15, w2, 2, -1, color);
     r->time = group(parent, x_time, y + 15, w4, 4, 1, color);
 
-    /* Bandeau de titre sous les afficheurs, dans la couleur de la ligne. */
+    /* Title band below the displays, in the row's colour. */
     lv_obj_t *band = lv_obj_create(parent);
     lv_obj_remove_style_all(band);
     lv_obj_set_pos(band, 8, y + 15 + DIGIT_H + 10);
@@ -131,7 +131,7 @@ static void show(row_t *r, const struct tm *t)
 
 /* ------------------------------------------------------------ easter egg */
 
-#define BOLTS 6      /* 3 éclairs principaux + 1 ramification chacun */
+#define BOLTS 6      /* 3 main bolts + 1 branch each */
 #define BOLT_PTS 15
 static lv_point_t s_bolt[BOLTS][BOLT_PTS];
 static int s_bolt_len[BOLTS];
@@ -141,12 +141,12 @@ static void bolts_draw(lv_event_t *e)
 {
     if (s_flash <= 0 || s_flash >= 1000) return;
     lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(e);
-    /* Trois flashs successifs (phases paires), noir entre deux (phases impaires). */
+    /* Three successive flashes (even phases), black in between (odd phases). */
     int phase = s_flash * 6 / 1000;
     if (phase % 2) return;
-    int decay = 255 - (s_flash % 167) * 255 / 167; /* chaque flash décroît */
+    int decay = 255 - (s_flash % 167) * 255 / 167; /* each flash decays */
 
-    /* Voile bleuté sur tout l'écran, bref. */
+    /* Brief bluish veil over the whole screen. */
     lv_draw_rect_dsc_t veil;
     lv_draw_rect_dsc_init(&veil);
     veil.bg_color = lv_color_hex(0x9CC4FF);
@@ -154,7 +154,7 @@ static void bolts_draw(lv_event_t *e)
     lv_area_t all = {0, 0, KG_W - 1, KG_H - 1};
     lv_draw_rect(ctx, &veil, &all);
 
-    /* Halo opaque teinté (pas d'accumulation de transparence aux jointures), puis cœur blanc. */
+    /* Opaque tinted glow (no alpha build-up at the joints), then a white core. */
     lv_draw_line_dsc_t glow, core;
     lv_draw_line_dsc_init(&glow);
     lv_draw_line_dsc_init(&core);
@@ -182,14 +182,14 @@ static lv_coord_t clamp_x(lv_coord_t x) { return x < 4 ? 4 : x > KG_W - 4 ? KG_W
 static void discharge(void)
 {
     for (int b = 0; b < BOLTS / 2; b++) {
-        /* Éclair principal, du haut en bas, tracé brisé. */
+        /* Main bolt, top to bottom, jagged path. */
         lv_coord_t x = 30 + rand() % 180;
         s_bolt_len[b] = BOLT_PTS;
         for (int i = 0; i < BOLT_PTS; i++) {
             s_bolt[b][i] = (lv_point_t){x, i * KG_H / (BOLT_PTS - 1)};
             x = clamp_x(x + (rand() % 29) - 14);
         }
-        /* Ramification : part d'un point du tiers central, s'éloigne en diagonale. */
+        /* Branch: starts in the middle third and runs off diagonally. */
         int r = BOLTS / 2 + b, from = 4 + rand() % 5, dir = rand() % 2 ? 1 : -1;
         lv_point_t p = s_bolt[b][from];
         s_bolt_len[r] = 6;
@@ -236,10 +236,10 @@ static void update(lv_timer_t *t)
     if (model_next_alarm(&alarm)) {
         show(&s_dest, &alarm);
         seg7_set_colon(s_dest.time, true);
-        lv_label_set_text(s_dest_title, "DESTINATION");
+        lv_label_set_text(s_dest_title, "DESTINATION TIME");
     } else {
         show(&s_dest, NULL);
-        lv_label_set_text(s_dest_title, "DESTINATION  -  AUCUNE ALARME");
+        lv_label_set_text(s_dest_title, "DESTINATION TIME  -  NO ALARM");
     }
 
     time_t sync = hal_last_sync();
@@ -252,7 +252,7 @@ static void update(lv_timer_t *t)
         show(&s_last, NULL);
     }
 
-    /* Seuil de pas franchi : une décharge par jour. */
+    /* Step goal reached: one discharge per day. */
     if (now.tm_hour == 0 && now.tm_min == 0) s_egg_done_today = false;
     if (!s_egg_done_today && hal_steps_today() >= STEPS_EGG) {
         s_egg_done_today = true;
@@ -263,7 +263,7 @@ static void update(lv_timer_t *t)
 static void set_active(bool on)
 {
     if (on) {
-        s_last_min = s_last_sec = -1; /* tout redessiner au retour */
+        s_last_min = s_last_sec = -1; /* redraw everything on return */
         lv_timer_resume(s_timer);
         update(NULL);
     } else {
@@ -277,11 +277,11 @@ static lv_obj_t *create(void)
     lv_obj_set_style_bg_color(s_scr, KG_C_BG, 0);
     lv_obj_clear_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_dest_title = row(s_scr, 3, KG_C_SEG_RED, "DESTINATION", &s_dest);
-    row(s_scr, 3 + ROW_H, KG_C_SEG_GREEN, "PRÉSENT", &s_now);
-    row(s_scr, 3 + 2 * ROW_H, KG_C_SEG_AMBER, "DERNIÈRE SYNCHRO", &s_last);
+    s_dest_title = row(s_scr, 3, KG_C_SEG_RED, "DESTINATION TIME", &s_dest);
+    row(s_scr, 3 + ROW_H, KG_C_SEG_GREEN, "PRESENT TIME", &s_now);
+    row(s_scr, 3 + 2 * ROW_H, KG_C_SEG_AMBER, "LAST TIME DEPARTED", &s_last);
 
-    /* Zone d'appui long cachée : la ligne verte. */
+    /* Hidden long-press area: the green row. */
     lv_obj_t *hot = lv_obj_create(s_scr);
     lv_obj_remove_style_all(hot);
     lv_obj_set_pos(hot, 0, 3 + ROW_H);
@@ -306,5 +306,5 @@ const kg_face_t kg_face_circuits = {
     .brightness_pct = 100,
 };
 
-/* Accès console / tests : déclencher la décharge. */
+/* Console / test hook: trigger the discharge. */
 void face_circuits_discharge(void) { discharge(); }

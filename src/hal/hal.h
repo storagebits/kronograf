@@ -1,8 +1,8 @@
 /*
- * Interface matérielle vue par l'UI. Implémentée deux fois :
+ * Hardware interface as seen by the UI. Implemented twice:
  *   src/hal/device/  — T-Watch 2020 (ESP32)
- *   src/hal/sim/     — simulateur macOS (valeurs factices pilotables)
- * L'UI n'inclut jamais rien d'autre que ce fichier pour parler au matériel.
+ *   src/hal/sim/     — macOS simulator (controllable fake values)
+ * The UI never includes anything but this file to talk to the hardware.
  */
 #pragma once
 #include <stdbool.h>
@@ -19,7 +19,7 @@ extern "C" {
 
 typedef enum { KG_REV_UNKNOWN = 0, KG_REV_V1 = 1, KG_REV_V2 = 2, KG_REV_V3 = 3 } kg_rev_t;
 
-/* Inventaire détecté au démarrage (scan I²C / sondes). */
+/* Inventory detected at boot (I²C scan / probes). */
 typedef struct {
     kg_rev_t rev;
     bool pmu;        /* AXP202 @0x35 */
@@ -38,7 +38,7 @@ typedef struct {
 } kg_inventory_t;
 
 typedef struct {
-    int percent;      /* 0..100, -1 si inconnu */
+    int percent;      /* 0..100, -1 if unknown */
     int millivolts;
     bool charging;
     bool usb;
@@ -46,16 +46,16 @@ typedef struct {
 
 const kg_inventory_t *hal_inventory(void);
 
-/* Heure locale (America/Toronto, DST géré par la libc via TZ). */
+/* Local time (America/Toronto, DST handled by libc through TZ). */
 void hal_now(struct tm *out, uint32_t *ms);
 
-/* Faux tant que l'heure n'a été ni lue d'une RTC fiable ni synchronisée. */
+/* False until the time has been read from a trusted RTC or synchronised. */
 bool hal_time_valid(void);
 
-/* Horodatage de la dernière synchro NTP réussie (0 = jamais). */
+/* Timestamp of the last successful NTP sync (0 = never). */
 time_t hal_last_sync(void);
 
-/* Texte court pour l'utilisateur si l'heure ne peut pas être réglée, sinon NULL. */
+/* Short user-facing text when the time cannot be set, NULL otherwise. */
 const char *hal_time_hint(void);
 
 kg_battery_t hal_battery(void);
@@ -63,34 +63,34 @@ uint32_t hal_steps_today(void);
 
 void hal_backlight(uint8_t level); /* 0..255 */
 
-/* Réglages persistants (NVS sur la montre). */
+/* Persistent settings (NVS on the watch). */
 int32_t hal_setting_get(const char *key, int32_t def);
 void hal_setting_set(const char *key, int32_t value);
 
-/* Luminosité choisie par l'utilisateur (8..255, persistante) et délai de veille (s). */
+/* User brightness (8..255, persistent) and screen timeout (s). */
 uint8_t hal_brightness_get(void);
 void hal_brightness_set(uint8_t level);
 uint16_t hal_screen_timeout_get(void);
 void hal_screen_timeout_set(uint16_t seconds);
 
-/* Wi-Fi : identifiants saisis sur la montre (NVS, prioritaires sur secrets.h). */
+/* Wi-Fi: credentials entered on the watch (NVS, take precedence over secrets.h). */
 void hal_wifi_scan_start(void);
-int hal_wifi_scan_count(void);                       /* -1 : scan en cours */
+int hal_wifi_scan_count(void);                       /* -1: scan in progress */
 bool hal_wifi_scan_get(int i, char *ssid, size_t n, int *rssi);
-void hal_wifi_set_credentials(const char *ssid, const char *pass); /* déclenche une synchro */
-const char *hal_wifi_ssid(void);                     /* réseau configuré ("" si aucun) */
-const char *hal_net_status(void);                    /* état lisible : « synchronisé »… */
+void hal_wifi_set_credentials(const char *ssid, const char *pass); /* triggers a sync */
+const char *hal_wifi_ssid(void);                     /* configured network ("" if none) */
+const char *hal_net_status(void);                    /* readable status: "Synced"… */
 
-/* Facteur de luminosité demandé par le cadran affiché (100 = réglage utilisateur). */
+/* Brightness scale requested by the face on screen (100 = user setting). */
 void hal_brightness_scale(uint8_t pct);
 
-/* Gros tampons (images de cadran) : PSRAM sur la montre, malloc en simulateur. */
+/* Large buffers (face images): PSRAM on the watch, malloc in the simulator. */
 void *hal_alloc_large(size_t bytes);
-/* Retour haptique, non bloquant. Motif : durées alternées marche/arrêt, en commençant par marche. */
+/* Haptic feedback, non-blocking. Pattern: alternating on/off durations, starting with on. */
 void hal_vibrate(uint16_t ms);
 void hal_vibrate_pattern(const uint16_t *ms, uint8_t n);
 
-/* Sons synthétisés (haut-parleur si présent), non bloquant. hz = 0 : silence. */
+/* Synthesised sounds (speaker if present), non-blocking. hz = 0: silence. */
 typedef struct {
     uint16_t hz;
     uint16_t ms;
@@ -98,40 +98,40 @@ typedef struct {
 void hal_tones(const kg_tone_t *tones, uint8_t n);
 bool hal_sound_available(void);
 
-/* Réveil programmé : la montre doit être éveillée à `when` (alarme, minuteur). 0 = aucun. */
+/* Scheduled wake-up: the watch must be awake at `when` (alarm, timer). 0 = none. */
 void hal_schedule_wakeup(time_t when);
 
-/* Historique des pas : out[0] = hier … out[6] = il y a 7 jours (0 si inconnu). */
+/* Step history: out[0] = yesterday … out[6] = 7 days ago (0 if unknown). */
 void hal_steps_history(uint32_t out[7]);
 
-/* Météo (Open-Meteo, Montréal). Copie du dernier relevé (cache persistant) ; faux si aucun.
- * hal_weather_refresh() lance une mise à jour en tâche de fond si le relevé a plus de
- * `max_age_s` secondes (Wi-Fi allumé le temps de la requête). Statut : NULL si tout va bien. */
+/* Weather (Open-Meteo, Montréal). Copy of the latest reading (persistent cache); false if
+ * none. hal_weather_refresh() starts a background update when the reading is older than
+ * `max_age_s` seconds (Wi-Fi on for the request). Status: NULL when all is well. */
 bool hal_weather(kg_weather_t *out);
 void hal_weather_refresh(uint32_t max_age_s);
-const char *hal_weather_status(void); /* dernière erreur, NULL si la dernière requête a réussi */
+const char *hal_weather_status(void); /* last error, NULL if the last request succeeded */
 bool hal_weather_busy(void);
 
-/* Bus STM (GTFS temps réel) : seulement si une clé est fournie dans secrets.h. */
+/* STM buses (GTFS realtime): only when an API key is provided in secrets.h. */
 bool hal_bus_available(void);
-const char *hal_bus_stops(void);          /* codes d'arrêt suivis, « 52345,52346 » ("" : aucun) */
+const char *hal_bus_stops(void);          /* followed stop codes, "52345,52346" ("": none) */
 void hal_bus_set_stops(const char *stops);
 bool hal_bus(kg_bus_t *out);
 void hal_bus_refresh(uint32_t max_age_s);
 const char *hal_bus_status(void);
 
-/* Notifications iPhone (BLE, ANCS). L'iPhone se connecte et s'appaire depuis Réglages →
- * Bluetooth ; le code d'appairage s'affiche sur la montre. */
+/* iPhone notifications (BLE, ANCS). The first connection is made from a BLE app such as
+ * nRF Connect; the pairing code shows on the watch, then the iPhone reconnects by itself. */
 typedef enum { KG_BLE_OFF, KG_BLE_WAITING, KG_BLE_PAIRING, KG_BLE_CONNECTED, KG_BLE_READY } kg_ble_state_t;
 kg_ble_state_t hal_ble_state(void);
-uint32_t hal_ble_passkey(void);  /* code à 6 chiffres, valable en KG_BLE_PAIRING */
+uint32_t hal_ble_passkey(void);  /* 6-digit code, valid in KG_BLE_PAIRING */
 bool hal_ble_enabled(void);
-void hal_ble_enable(bool on);    /* persistant */
-void hal_ble_forget(void);       /* oublie l'iPhone appairé */
+void hal_ble_enable(bool on);    /* persistent */
+void hal_ble_forget(void);       /* forgets the paired iPhone */
 int hal_notif_count(void);
-bool hal_notif_get(int i, kg_notif_t *out); /* 0 = la plus récente */
-uint32_t hal_notif_seq(void);    /* +1 à chaque nouvelle notification à signaler */
-void hal_notif_dismiss(uint32_t uid); /* retire de la montre et efface sur l'iPhone */
+bool hal_notif_get(int i, kg_notif_t *out); /* 0 = most recent */
+uint32_t hal_notif_seq(void);    /* +1 for each new notification to announce */
+void hal_notif_dismiss(uint32_t uid); /* removes it from the watch and clears it on the iPhone */
 
 #ifdef __cplusplus
 }

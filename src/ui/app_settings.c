@@ -1,7 +1,7 @@
 /*
- * App Réglages : luminosité, mise en veille, cadran par défaut, format 24 h, Wi-Fi
- * (scan + saisie du mot de passe au clavier tactile), notifications iPhone (BLE), arrêts
- * STM suivis, à propos.
+ * Settings app: brightness, screen timeout, default face, 24 h format, Wi-Fi (scan +
+ * password entry on the touch keyboard), iPhone notifications (BLE), followed STM stops,
+ * about.
  */
 #include "nav.h"
 #include "faces.h"
@@ -16,15 +16,15 @@ static lv_obj_t *s_list, *s_bright, *s_fmt24, *s_wifi_value, *s_about, *s_bus_va
 static lv_obj_t *s_timeout_btn[4], *s_face_btn[3];
 static const uint16_t TIMEOUTS[4] = {5, 10, 15, 30};
 
-/* Écran Wi-Fi */
+/* Wi-Fi screen */
 static lv_obj_t *s_wifi_scr, *s_wifi_list, *s_wifi_state, *s_kb_panel, *s_ta, *s_kb_title;
 static lv_timer_t *s_scan_timer;
 static char s_chosen[33];
 
-/* Écran « arrêt STM » */
+/* "STM stop" screen */
 static lv_obj_t *s_stop_scr, *s_stop_ta, *s_settings_scr;
 
-/* ------------------------------------------------------------- composants */
+/* ------------------------------------------------------------- components */
 
 static lv_obj_t *section(const char *title)
 {
@@ -46,7 +46,7 @@ static lv_obj_t *row(lv_coord_t h)
     return r;
 }
 
-/* Rangée de petits boutons exclusifs. */
+/* Row of small mutually exclusive buttons. */
 static void choose(lv_obj_t **btns, int n, int sel)
 {
     for (int i = 0; i < n; i++) {
@@ -55,7 +55,7 @@ static void choose(lv_obj_t **btns, int n, int sel)
     }
 }
 
-/* -------------------------------------------------------------- réglages */
+/* --------------------------------------------------------------- settings */
 
 static void refresh(void)
 {
@@ -68,20 +68,20 @@ static void refresh(void)
     if (ui_fmt24()) lv_obj_add_state(s_fmt24, LV_STATE_CHECKED);
     else lv_obj_clear_state(s_fmt24, LV_STATE_CHECKED);
     const char *ssid = hal_wifi_ssid();
-    lv_label_set_text_fmt(s_wifi_value, "%s\n%s", ssid[0] ? ssid : "Aucun réseau", hal_net_status());
+    lv_label_set_text_fmt(s_wifi_value, "%s\n%s", ssid[0] ? ssid : "No network", hal_net_status());
 
     if (hal_ble_enabled()) lv_obj_add_state(s_ble_sw, LV_STATE_CHECKED);
     else lv_obj_clear_state(s_ble_sw, LV_STATE_CHECKED);
-    static const char *const ST[] = {"Désactivées", "En attente de l'iPhone", "Appairage…", "Connexion…", "iPhone connecté"};
+    static const char *const ST[] = {"Off", "Waiting for the iPhone", "Pairing…", "Connecting…", "iPhone connected"};
     lv_label_set_text(s_ble_state, ST[hal_ble_state()]);
 
     if (s_bus_value) {
         const char *stops = hal_bus_stops();
-        lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "Aucun arrêt choisi");
+        lv_label_set_text_fmt(s_bus_value, "%s", stops[0] ? stops : "No stop selected");
     }
 
     const kg_inventory_t *inv = hal_inventory();
-    lv_label_set_text_fmt(s_about, "Kronograf · T-Watch 2020 V%d\nFlash %lu Mo · PSRAM %lu Ko", inv->rev,
+    lv_label_set_text_fmt(s_about, "Kronograf · T-Watch 2020 V%d\nFlash %lu MB · PSRAM %lu KB", inv->rev,
                           (unsigned long)inv->flash_mb, (unsigned long)inv->psram_kb);
 }
 
@@ -131,10 +131,10 @@ static void kb_done_cb(lv_event_t *e)
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_READY) {
         hal_wifi_set_credentials(s_chosen, lv_textarea_get_text(s_ta));
-        lv_textarea_set_text(s_ta, ""); /* le mot de passe ne reste pas à l'écran */
+        lv_textarea_set_text(s_ta, ""); /* the password does not stay on screen */
         lv_obj_add_flag(s_kb_panel, LV_OBJ_FLAG_HIDDEN);
         kit_tick();
-        ui_nav_back(); /* retour au lanceur ; l'état s'affiche dans Réglages */
+        ui_nav_back(); /* back to the launcher; the status shows in Settings */
     } else if (code == LV_EVENT_CANCEL) {
         lv_textarea_set_text(s_ta, "");
         lv_obj_add_flag(s_kb_panel, LV_OBJ_FLAG_HIDDEN);
@@ -145,7 +145,7 @@ static void network_cb(lv_event_t *e)
 {
     lv_obj_t *btn = lv_event_get_target(e);
     snprintf(s_chosen, sizeof s_chosen, "%s", lv_label_get_text(lv_obj_get_child(btn, 0)));
-    lv_label_set_text_fmt(s_kb_title, "Mot de passe · %s", s_chosen);
+    lv_label_set_text_fmt(s_kb_title, "Password · %s", s_chosen);
     lv_obj_clear_flag(s_kb_panel, LV_OBJ_FLAG_HIDDEN);
     kit_tick();
 }
@@ -156,7 +156,7 @@ static void scan_poll(lv_timer_t *t)
     if (n < 0) return;
     lv_timer_pause(t);
     lv_obj_clean(s_wifi_list);
-    lv_label_set_text_fmt(s_wifi_state, n ? "%d réseaux" : "Aucun réseau trouvé", n);
+    lv_label_set_text_fmt(s_wifi_state, n ? "%d networks" : "No network found", n);
     for (int i = 0; i < n && i < 12; i++) {
         char ssid[33];
         int rssi;
@@ -166,9 +166,9 @@ static void scan_poll(lv_timer_t *t)
         lv_obj_t *l = lv_obj_get_child(b, 0);
         lv_label_set_text(l, ssid);
         lv_obj_align(l, LV_ALIGN_LEFT_MID, 12, 0);
-        /* Force du signal : 1 à 4 barres en texte discret. */
+        /* Signal strength: 1 to 4 bars, as discreet text. */
         int bars = rssi > -55 ? 4 : rssi > -65 ? 3 : rssi > -75 ? 2 : 1;
-        lv_obj_t *q = kit_label(b, &kg_font_stencil_11, KG_C_TEXT_DIM, bars >= 3 ? "FORT" : bars == 2 ? "MOYEN" : "FAIBLE");
+        lv_obj_t *q = kit_label(b, &kg_font_stencil_11, KG_C_TEXT_DIM, bars >= 3 ? "STRONG" : bars == 2 ? "FAIR" : "WEAK");
         lv_obj_align(q, LV_ALIGN_RIGHT_MID, -10, 0);
     }
 }
@@ -183,7 +183,7 @@ static lv_obj_t *wifi_screen(void)
 {
     lv_obj_t *scr = kit_screen();
     kit_title(scr, "WI-FI");
-    s_wifi_state = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "Recherche…");
+    s_wifi_state = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "Scanning…");
     lv_obj_align(s_wifi_state, LV_ALIGN_TOP_MID, 0, 22);
     s_wifi_list = lv_obj_create(scr);
     lv_obj_remove_style_all(s_wifi_list);
@@ -194,7 +194,7 @@ static lv_obj_t *wifi_screen(void)
     lv_obj_set_style_pad_row(s_wifi_list, 6, 0);
     lv_obj_set_scroll_dir(s_wifi_list, LV_DIR_VER);
 
-    /* Saisie du mot de passe : champ + clavier plein écran. */
+    /* Password entry: field + full-screen keyboard. */
     s_kb_panel = lv_obj_create(scr);
     lv_obj_remove_style_all(s_kb_panel);
     lv_obj_set_size(s_kb_panel, KG_W, KG_H);
@@ -217,7 +217,7 @@ static lv_obj_t *wifi_screen(void)
     lv_obj_set_size(kb, KG_W, 172);
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_keyboard_set_textarea(kb, s_ta);
-    lv_obj_set_style_text_font(kb, &lv_font_montserrat_14, 0); /* contient les symboles du clavier */
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_14, 0); /* has the keyboard symbols */
     lv_obj_set_style_bg_color(kb, KG_C_BG, 0);
     lv_obj_set_style_pad_all(kb, 2, 0);
     lv_obj_set_style_pad_gap(kb, 2, 0);
@@ -239,19 +239,19 @@ static void wifi_open_cb(lv_event_t *e)
     (void)e;
     if (!s_wifi_scr) s_wifi_scr = wifi_screen();
     lv_obj_clean(s_wifi_list);
-    lv_label_set_text(s_wifi_state, "Recherche des réseaux…");
+    lv_label_set_text(s_wifi_state, "Scanning for networks…");
     lv_obj_add_flag(s_kb_panel, LV_OBJ_FLAG_HIDDEN);
     hal_wifi_scan_start();
     lv_timer_resume(s_scan_timer);
     lv_scr_load(s_wifi_scr);
 }
 
-/* ------------------------------------------------------------- arrêt STM */
+/* --------------------------------------------------------------- STM stop */
 
 static void stop_kb_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_READY) {
-        /* Le clavier numérique n'a pas de virgule : le point sépare plusieurs arrêts. */
+        /* The numeric keypad has no comma: a dot separates several stops. */
         char buf[40];
         snprintf(buf, sizeof buf, "%s", lv_textarea_get_text(s_stop_ta));
         for (char *c = buf; *c; c++)
@@ -260,14 +260,14 @@ static void stop_kb_cb(lv_event_t *e)
         kit_tick();
     }
     refresh();
-    lv_scr_load(s_settings_scr); /* retour direct aux Réglages */
+    lv_scr_load(s_settings_scr); /* straight back to Settings */
 }
 
 static lv_obj_t *stop_screen(void)
 {
     lv_obj_t *scr = kit_screen();
-    kit_title(scr, "ARRÊT STM");
-    lv_obj_t *hint = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "Code à 5 chiffres de l'arrêt ;\n« . » entre plusieurs arrêts");
+    kit_title(scr, "STM STOP");
+    lv_obj_t *hint = kit_label(scr, &kg_font_text_16, KG_C_TEXT_DIM, "5-digit stop code;\nuse \".\" between several stops");
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 20);
     s_stop_ta = lv_textarea_create(scr);
@@ -310,7 +310,7 @@ static void stop_open_cb(lv_event_t *e)
     lv_scr_load(s_stop_scr);
 }
 
-/* ----------------------------------------------------------------- écran */
+/* ----------------------------------------------------------------- screen */
 
 static lv_obj_t *small_button(lv_obj_t *parent, const char *text, lv_coord_t w, lv_event_cb_t cb, int i)
 {
@@ -332,10 +332,10 @@ static lv_obj_t *create(void)
     lv_obj_set_scroll_dir(s_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_OFF);
 
-    kit_title(s_list, "RÉGLAGES");
+    kit_title(s_list, "SETTINGS");
     lv_obj_set_align(lv_obj_get_child(s_list, 0), LV_ALIGN_DEFAULT);
 
-    section("LUMINOSITÉ");
+    section("BRIGHTNESS");
     lv_obj_t *r = row(40);
     s_bright = lv_slider_create(r);
     lv_obj_set_size(s_bright, 180, 8);
@@ -347,23 +347,23 @@ static lv_obj_t *create(void)
     lv_obj_set_style_pad_all(s_bright, 6, LV_PART_KNOB);
     lv_obj_add_event_cb(s_bright, bright_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    section("MISE EN VEILLE");
+    section("SCREEN TIMEOUT");
     r = row(42);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     static const char *const T[] = {"5 s", "10 s", "15 s", "30 s"};
     for (int i = 0; i < 4; i++) s_timeout_btn[i] = small_button(r, T[i], 48, timeout_cb, i);
 
-    section("CADRAN PAR DÉFAUT");
+    section("DEFAULT FACE");
     r = row(42);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    static const char *const F[] = {"Aviateur", "Circuits", "Nuit"};
+    static const char *const F[] = {"Aviator", "Circuits", "Night"};
     for (int i = 0; i < 3; i++) s_face_btn[i] = small_button(r, F[i], 66, face_cb, i);
 
-    section("AFFICHAGE");
+    section("DISPLAY");
     r = row(42);
-    lv_obj_t *l = kit_label(r, &kg_font_label_20, KG_C_TEXT, "Format 24 h");
+    lv_obj_t *l = kit_label(r, &kg_font_label_20, KG_C_TEXT, "24-hour clock");
     lv_obj_align(l, LV_ALIGN_LEFT_MID, 14, 0);
     s_fmt24 = lv_switch_create(r);
     lv_obj_set_size(s_fmt24, 50, 26);
@@ -373,7 +373,7 @@ static lv_obj_t *create(void)
     lv_obj_set_style_bg_color(s_fmt24, KG_C_HAND, LV_PART_KNOB);
     lv_obj_add_event_cb(s_fmt24, fmt24_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    section("NOTIFICATIONS IPHONE");
+    section("IPHONE NOTIFICATIONS");
     r = row(52);
     l = kit_label(r, &kg_font_label_20, KG_C_TEXT, "Bluetooth");
     lv_obj_align(l, LV_ALIGN_TOP_LEFT, 14, 5);
@@ -386,7 +386,7 @@ static lv_obj_t *create(void)
     lv_obj_set_style_bg_color(s_ble_sw, KG_C_ACCENT, LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(s_ble_sw, KG_C_HAND, LV_PART_KNOB);
     lv_obj_add_event_cb(s_ble_sw, ble_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_t *forget = kit_button(s_list, "Oublier l'iPhone", false, 220, 36, forget_cb, NULL);
+    lv_obj_t *forget = kit_button(s_list, "Forget the iPhone", false, 220, 36, forget_cb, NULL);
     lv_obj_set_style_text_font(lv_obj_get_child(forget, 0), &kg_font_text_16, 0);
 
     section("WI-FI");
@@ -399,8 +399,8 @@ static lv_obj_t *create(void)
     lv_obj_t *chev = kit_label(r, &kg_font_label_20, KG_C_ACCENT, ">");
     lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
 
-    if (hal_bus_available()) { /* sans clé STM, la section n'existe pas */
-        section("BUS STM");
+    if (hal_bus_available()) { /* without an STM key, the section does not exist */
+        section("STM BUSES");
         r = row(42);
         lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_bg_color(r, KG_C_BTN_PRESS, LV_STATE_PRESSED);
@@ -411,7 +411,7 @@ static lv_obj_t *create(void)
         lv_obj_align(chev, LV_ALIGN_RIGHT_MID, -14, 0);
     }
 
-    section("À PROPOS");
+    section("ABOUT");
     r = row(46);
     s_about = kit_label(r, &kg_font_text_16, KG_C_TEXT_DIM, "");
     lv_obj_align(s_about, LV_ALIGN_LEFT_MID, 14, 0);
@@ -428,7 +428,7 @@ static void on_show(void)
 
 const kg_app_t kg_app_settings = {
     .name = "settings",
-    .label = "Réglages",
+    .label = "Settings",
     .icon = KG_ICON_SETTINGS,
     .create = create,
     .on_show = on_show,

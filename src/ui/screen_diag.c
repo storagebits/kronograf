@@ -1,5 +1,5 @@
 /*
- * Tranche 0 — écran de diagnostic : révision détectée et inventaire matériel réel.
+ * Stage 0 — diagnostic screen: detected revision and actual hardware inventory.
  */
 #include "ui.h"
 #include "theme.h"
@@ -16,7 +16,7 @@ static const char *rev_name(kg_rev_t rev)
     case KG_REV_V1: return "T-Watch 2020 V1";
     case KG_REV_V2: return "T-Watch 2020 V2";
     case KG_REV_V3: return "T-Watch 2020 V3";
-    default:        return "Révision inconnue";
+    default:        return "Unknown revision";
     }
 }
 
@@ -29,7 +29,7 @@ static lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, lv_color_t color
     return l;
 }
 
-/* Une ligne d'inventaire : pastille (présent / absent) + nom. */
+/* One inventory line: dot (present / absent) + name. */
 static void item(lv_obj_t *grid, int col, int row, const char *name, bool present)
 {
     lv_obj_t *cell = lv_obj_create(grid);
@@ -74,10 +74,10 @@ lv_obj_t *ui_diag_create(void)
 
     char mem[64];
     if (inv->psram)
-        snprintf(mem, sizeof mem, "Flash %lu Mo · PSRAM %lu Ko",
+        snprintf(mem, sizeof mem, "Flash %lu MB · PSRAM %lu KB",
                  (unsigned long)inv->flash_mb, (unsigned long)inv->psram_kb);
     else
-        snprintf(mem, sizeof mem, "Flash %lu Mo · sans PSRAM", (unsigned long)inv->flash_mb);
+        snprintf(mem, sizeof mem, "Flash %lu MB · no PSRAM", (unsigned long)inv->flash_mb);
     lv_obj_t *sub = label(scr, &kg_font_text_16, KG_C_WARN, mem);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, KG_GUTTER, 66);
 
@@ -98,13 +98,13 @@ lv_obj_t *ui_diag_create(void)
 
     item(grid, 0, 0, "PMU AXP202",      inv->pmu);
     item(grid, 0, 1, "RTC PCF8563",     inv->rtc);
-    item(grid, 0, 2, "Accél. BMA423",   inv->accel);
-    item(grid, 0, 3, "Tactile FT6336",  inv->touch);
-    item(grid, 0, 4, "Vibreur",         inv->motor);
-    item(grid, 1, 0, "Haut-parleur",    inv->speaker);
-    item(grid, 1, 1, "Infrarouge",      inv->ir_tx);
+    item(grid, 0, 2, "Accel BMA423",    inv->accel);
+    item(grid, 0, 3, "Touch FT6336",    inv->touch);
+    item(grid, 0, 4, "Vibration",       inv->motor);
+    item(grid, 1, 0, "Speaker",         inv->speaker);
+    item(grid, 1, 1, "Infrared",        inv->ir_tx);
     item(grid, 1, 2, "GPS",             inv->gps);
-    item(grid, 1, 3, "Carte microSD",   inv->sdcard);
+    item(grid, 1, 3, "microSD card",    inv->sdcard);
     item(grid, 1, 4, "Microphone",      inv->mic);
 
     s_clock = label(scr, &kg_font_label_20, KG_C_LUME, "--:--:--");
@@ -125,12 +125,12 @@ void ui_diag_update(void)
 
     kg_battery_t b = hal_battery();
     if (b.percent < 0)
-        lv_label_set_text(s_batt, "Batterie ?");
+        lv_label_set_text(s_batt, "Battery ?");
     else
     {
-        /* En charge : la valeur passe au vert plutôt que d'allonger le texte. */
+        /* Charging: the value turns green rather than lengthening the text. */
         lv_obj_set_style_text_color(s_batt, b.charging ? KG_C_OK : KG_C_TEXT, 0);
-        lv_label_set_text_fmt(s_batt, "%d %%  %d,%02d V", b.percent, b.millivolts / 1000,
+        lv_label_set_text_fmt(s_batt, "%d %%  %d.%02d V", b.percent, b.millivolts / 1000,
                               (b.millivolts % 1000) / 10);
     }
 }

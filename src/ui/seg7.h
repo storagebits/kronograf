@@ -1,7 +1,6 @@
 /*
- * Afficheur 7 segments dessiné en code (polygones anti-crénelés) :
- * segments éteints visibles en faible intensité, halo sur les segments allumés,
- * scintillement bref quand un segment s'allume.
+ * 7-segment display drawn in code (anti-aliased polygons): unlit segments stay faintly
+ * visible, lit segments get a glow, and a segment flickers briefly when it lights up.
  */
 #pragma once
 #include "lvgl.h"
@@ -10,15 +9,15 @@
 extern "C" {
 #endif
 
-/* Crée un groupe de `ndigits` chiffres de taille digit_w × digit_h.
- * colon_after : index du chiffre suivi d'un « : » (‑1 si aucun). */
+/* Creates a group of `ndigits` digits, each digit_w × digit_h.
+ * colon_after: index of the digit followed by a ':' (-1 for none). */
 lv_obj_t *seg7_create(lv_obj_t *parent, int ndigits, lv_coord_t digit_w, lv_coord_t digit_h,
                       int colon_after, lv_color_t color);
 
-/* Texte : chiffres 0-9, « - » et « » (espace = tout éteint). Longueur = ndigits. */
+/* Text: digits 0-9, '-' and ' ' (space = all segments off). Length = ndigits. */
 void seg7_set_text(lv_obj_t *seg, const char *text);
 
-/* « : » allumé ou éteint (clignotement à la seconde). */
+/* Colon on or off (blinks every second). */
 void seg7_set_colon(lv_obj_t *seg, bool on);
 
 #ifdef __cplusplus
