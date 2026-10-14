@@ -261,7 +261,7 @@ void hal_ble_enable(bool on) { s_ble_on = on; }
 void hal_ble_forget(void) {}
 
 static const kg_notif_t DEMO_NOTIFS[] = {
-    {101, KG_CAT_SOCIAL, "com.apple.MobileSMS", "Camille", "Meet at Jean-Talon Market at 6? I'll bring the croissants.", "20261012T171205"},
+    {101, KG_CAT_SOCIAL, "com.apple.MobileSMS", "Doc Brown", "Marty, the flux capacitor is fluxing! Meet me at the clock tower at 10:04 sharp.", "20261012T171205"},
     {102, KG_CAT_EMAIL, "com.apple.mobilemail", "STM — Service info", "Route 24: detour via Sherbrooke Street until further notice.", "20261012T164010"},
     {103, KG_CAT_SCHEDULE, "com.apple.mobilecal", "Dentist", "Tomorrow at 9:30 · 1250 Sainte-Catherine St.", "20261012T150000"},
     {104, KG_CAT_CALL, "com.apple.mobilephone", "Mom", "Incoming call", "20261012T171500"},
@@ -282,7 +282,21 @@ bool hal_notif_get(int i, kg_notif_t *out)
         if (s_dismissed & 1u << k) continue;
         if (i-- == 0) {
             *out = DEMO_NOTIFS[k];
-            if (k == 0 && getenv("KG_NOTIF_CAT")) out->category = (uint8_t)env_int("KG_NOTIF_CAT", 4);
+            /* Received today, a few minutes before the (simulated) current time. */
+            static const int MIN_AGO[] = {1, 25, 70, 0};
+            struct tm t;
+            hal_now(&t, NULL);
+            int m = t.tm_hour * 60 + t.tm_min - MIN_AGO[k];
+            if (m < 0) m = 0;
+            snprintf(out->date, sizeof out->date, "%04d%02d%02dT%02d%02d00", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                     m / 60, m % 60);
+            if (k == 0 && env_int("KG_NOTIF_CAT", -1) == KG_CAT_CALL) { /* the incoming call comes first */
+                *out = DEMO_NOTIFS[3];
+                snprintf(out->date, sizeof out->date, "%04d%02d%02dT%02d%02d00", t.tm_year + 1900, t.tm_mon + 1,
+                         t.tm_mday, t.tm_hour, t.tm_min);
+            } else if (k == 0 && getenv("KG_NOTIF_CAT")) {
+                out->category = (uint8_t)env_int("KG_NOTIF_CAT", 4);
+            }
             return true;
         }
     }
