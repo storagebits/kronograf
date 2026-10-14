@@ -134,7 +134,14 @@ int main(int argc, char **argv)
             model_chrono_start_stop();
         }
         const char *app = getenv("KG_APP");
-        if (app && !strcmp(app, "launcher")) ui_nav_open_launcher();
+        if (app && !strcmp(app, "launcher")) {
+            ui_nav_open_launcher();
+            if (getenv("KG_PAGE")) ui_nav_launcher_page(atoi(getenv("KG_PAGE")));
+        } else if (app && !strncmp(app, "net:", 4)) { /* a network tool, e.g. net:ping */
+            ui_nav_open_app("net");
+            ui_net_open(app + 4);
+            if (!strcmp(app + 4, "speed")) hal_tool_start(KG_TOOL_SPEED, ""); /* a finished test */
+        }
         else if (app && !strcmp(app, "notifs")) ui_notif_open_list();
         else if (app) ui_nav_open_app(app);
         if (getenv("KG_ALERT")) ui_nav_test_alert(!strcmp(getenv("KG_ALERT"), "alarm"));

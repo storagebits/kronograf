@@ -8,7 +8,8 @@
  *   battlog     battery-life log of the last period on battery
  *   face <n>    shows face n (0 aviator, 1 circuits, 2 night)
  *   launcher    opens the app launcher
- *   app <name>  opens an app (chrono, timer, alarms, steps, weather, settings)
+ *   app <name>  opens an app (chrono, timer, alarms, world, weather, sky, steps, level, torch,
+ *               net, remote, system, settings); "app net:<tool>" opens a network tool
  *   ring <alarm|timer>  alert screen + ringing (test)
  *   timer <s>   starts the timer (deadline test)
  *   battsim <0|1>  simulates battery on USB (light-sleep test)
@@ -16,6 +17,11 @@
  *   weather [refresh]   latest weather reading
  *   bus [refresh | stops <codes> | key <key> | key clear]  departures, stops, STM API key
  *   ble [on | off | forget]  BLE state, ANCS counters, notifications
+ *   net [<tool> [target]]  network toolbox: ping, trace, dns, ports, lan, speed, public, ble
+ *                          (starts it; "net" alone prints its progress and renews the Wi-Fi lease)
+ *   sys         system information (as in the System app)
+ *   accel       accelerometer reading in g
+ *   ir [<brand> <key>]  sends a TV code (brand 0-3, key 0 power … 6 input)
  *   beep        short beep (speaker test)
  *   egg         triggers the Time circuits discharge
  *   coredump [erase]  summary of the last crash (and erase it)
@@ -199,6 +205,56 @@ static void cmd_coredump_raw(void)
     s_out->println("COREDUMP END");
 }
 
+/* Network toolbox from the console: starts a tool, or prints the running one's state. */
+static void cmd_net(const char *args)
+{
+    static const char *const NAMES[] = {"", "ping", "trace", "dns", "ports", "lan", "speed", "public", "ble"};
+    hal_net_hold();
+    char name[12] = "", target[48] = "";
+    sscanf(args, "%11s %47s", name, target);
+    if (name[0]) {
+        for (int t = 1; t < (int)(sizeof NAMES / sizeof NAMES[0]); t++) {
+            if (strcmp(name, NAMES[t])) continue;
+            hal_tool_start((kg_tool_t)t, target[0] ? target : (t == KG_TOOL_DNS ? "example.com" : "gateway"));
+            s_out->printf("net: %s started; \"net\" shows progress\n", name);
+            return;
+        }
+        s_out->println("net: unknown tool (ping, trace, dns, ports, lan, speed, public, ble)");
+        return;
+    }
+    static kg_tool_state_t *stp; /* 2.6 KB, in PSRAM */
+    if (!stp && !(stp = (kg_tool_state_t *)hal_alloc_large(sizeof *stp))) return;
+    kg_tool_state_t &st = *stp;
+    hal_tool_get(&st);
+    kg_link_t l;
+    hal_net_link(&l);
+    char ip[16], gw[16];
+    s_out->printf("link: %s %s rssi %d ch %d ip %s gw %s\n", l.up ? "up" : "down", l.ssid, l.rssi, l.channel,
+                  kg_ip_str(l.ip, ip), kg_ip_str(l.gw, gw));
+    s_out->printf("tool: %s %s target \"%s\" — %s\n", NAMES[st.tool < 9 ? st.tool : 0], st.running ? "running" : "done",
+                  st.target, st.status);
+    for (int i = 0; i < st.n; i++) s_out->printf("  %-24s %s\n", st.rows[i].a, st.rows[i].b);
+    if (st.tool == KG_TOOL_PING && st.recv)
+        s_out->printf("  rtt min %.1f avg %.1f max %.1f ms\n", st.min_us / 1000.0, st.sum_us / 1000.0 / st.recv, st.max_us / 1000.0);
+    if (st.tool == KG_TOOL_SPEED)
+        s_out->printf("  %.1f Mbit/s (peak %.1f), %lu bytes in %lu ms, ttfb %lu ms\n", st.mbps, st.peak_mbps,
+                      (unsigned long)st.bytes, (unsigned long)st.elapsed_ms, (unsigned long)st.ttfb_ms);
+}
+
+static void cmd_sys(void)
+{
+    kg_sysinfo_t s;
+    hal_sysinfo(&s);
+    s_out->printf("sys: Kronograf %s, up %lu s, reset: %s, CPU %u MHz, %.0f fps\n", s.version, (unsigned long)s.uptime_s,
+                  s.reset_reason, s.cpu_mhz, s.fps);
+    s_out->printf("  internal %lu / %lu free (low %lu), PSRAM %lu / %lu free\n", (unsigned long)s.heap_free,
+                  (unsigned long)s.heap_total, (unsigned long)s.heap_min, (unsigned long)s.psram_free, (unsigned long)s.psram_total);
+    s_out->printf("  battery %d mV %d %% %+.1f mA, VBUS %d mV, AXP %.1f °C, usb %d charging %d\n", s.batt_mv, s.batt_pct,
+                  s.batt_ma, s.vbus_mv, s.pmu_temp, s.usb, s.charging);
+    s_out->printf("  wakes %lu, light sleeps %lu, app %lu / %lu KB\n", (unsigned long)s.wakes, (unsigned long)s.light_sleeps,
+                  (unsigned long)s.app_kb, (unsigned long)s.app_slot_kb);
+}
+
 static void run(char *cmd)
 {
     if (*cmd) lv_disp_trig_activity(nullptr); /* a command counts as activity: no screen-off in the middle of a test */
@@ -221,6 +277,10 @@ static void run(char *cmd)
     else if (!strcmp(cmd, "launcher")) {
         power_force(true);
         ui_nav_open_launcher();
+    } else if (!strncmp(cmd, "app net:", 8)) {
+        power_force(true);
+        ui_nav_open_app("net");
+        if (!ui_net_open(cmd + 8)) s_out->println("unknown tool");
     } else if (!strncmp(cmd, "app ", 4)) {
         power_force(true);
         s_out->println(ui_nav_open_app(cmd + 4) ? "ok" : "unknown app (or transition running)");
@@ -279,6 +339,21 @@ static void run(char *cmd)
             kg_notif_t n;
             if (hal_notif_get(i, &n)) s_out->printf("  [%u] %s — %s\n", n.category, n.app, n.title);
         }
+    } else if (!strcmp(cmd, "net") || !strncmp(cmd, "net ", 4)) {
+        cmd_net(cmd[3] ? cmd + 4 : "");
+    } else if (!strcmp(cmd, "sys")) {
+        cmd_sys();
+    } else if (!strcmp(cmd, "accel")) {
+        float x, y, z;
+        if (hal_accel(&x, &y, &z)) s_out->printf("accel: x %+.3f y %+.3f z %+.3f g\n", x, y, z);
+        else s_out->println("accel: no accelerometer");
+    } else if (!strcmp(cmd, "ir") || !strncmp(cmd, "ir ", 3)) {
+        int b, k;
+        if (sscanf(cmd, "ir %d %d", &b, &k) == 2 && b >= 0 && b < KG_IR_N_BRANDS && k >= 0 && k < KG_N_KEYS) {
+            hal_ir_send(KG_IR_BRANDS[b].proto, KG_IR_BRANDS[b].keys[k]);
+            s_out->printf("ir: sent %s key %d\n", KG_IR_BRANDS[b].name, k);
+        }
+        ir_print(*s_out);
     } else if (!strcmp(cmd, "beep")) {
         static const kg_tone_t t[] = {{1320, 80}, {0, 60}, {1760, 120}};
         hal_tones(t, 3);
@@ -309,7 +384,7 @@ static void run(char *cmd)
     else if (!strncmp(cmd, "log ", 4)) {
         esp_log_level_set("*", (esp_log_level_t)atoi(cmd + 4));
         s_out->println("ok");
-    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes> | key <key>] | ble [on|off|forget] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
+    } else if (!strcmp(cmd, "help")) s_out->println("status | screenshot | sleep | wake | bl <n> | timeout <s> | touch | battlog | power [min] | face <n> | egg | launcher | app <name> | ring <alarm|timer> | timer <s> | beep | weather [refresh] | bus [refresh | stops <codes> | key <key>] | ble [on|off|forget] | net [<tool> [target]] | sys | accel | ir [<brand> <key>] | coredump [erase] | reboot | diag | lcdtest | log <0-5> | help");
     else if (*cmd) s_out->printf("unknown command: %s\n", cmd);
 }
 

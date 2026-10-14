@@ -11,11 +11,17 @@
 #include <math.h>
 #include <string.h>
 
-static const kg_app_t *const APPS[] = {&kg_app_chrono, &kg_app_timer, &kg_app_alarms, &kg_app_steps,
-                                       &kg_app_weather, &kg_app_settings};
+/* Launcher order: 3 × 3 pages, everyday apps first, tools on the second page. */
+static const kg_app_t *const APPS[] = {
+    &kg_app_chrono, &kg_app_timer, &kg_app_alarms,
+    &kg_app_world, &kg_app_weather, &kg_app_sky,
+    &kg_app_steps, &kg_app_level, &kg_app_torch,
+    &kg_app_net, &kg_app_remote, &kg_app_system,
+    &kg_app_settings,
+};
 #define N_APPS ((int)(sizeof APPS / sizeof APPS[0]))
 
-static lv_obj_t *s_launcher;
+static lv_obj_t *s_launcher, *s_pages, *s_dots[4];
 static lv_obj_t *s_app_scr[N_APPS];
 static int s_app = -1;              /* app on screen, -1 otherwise */
 static bool s_in_launcher;
@@ -43,7 +49,7 @@ static void arc(lv_draw_ctx_t *ctx, lv_coord_t w, lv_color_t c, lv_coord_t cx, l
 }
 
 /* Vector pictograms, centred on (cx, cy), about 22 px. */
-static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coord_t cy)
+void ui_nav_draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coord_t cy)
 {
     lv_draw_line_dsc_t d;
     lv_draw_line_dsc_init(&d);
@@ -104,6 +110,74 @@ static void draw_icon(lv_draw_ctx_t *ctx, kg_icon_t icon, lv_coord_t cx, lv_coor
         arc(ctx, 2, KG_C_HAND, cx + 2, cy + 4, 7, 180, 360);
         line(ctx, &d, cx - 9, cy + 8, cx + 11, cy + 8);
         break;
+    case KG_ICON_NET: /* Wi-Fi waves */
+        arc(ctx, 2, KG_C_HAND, cx, cy + 9, 17, 225, 315);
+        arc(ctx, 2, KG_C_HAND, cx, cy + 9, 11, 225, 315);
+        arc(ctx, 2, KG_C_HAND, cx, cy + 9, 5, 225, 315);
+        arc(ctx, 2, KG_C_ACCENT, cx, cy + 9, 1, 0, 360);
+        break;
+    case KG_ICON_REMOTE: /* remote control and its beam */
+        line(ctx, &d, cx - 5, cy - 3, cx - 5, cy + 12);
+        line(ctx, &d, cx + 5, cy - 3, cx + 5, cy + 12);
+        line(ctx, &d, cx - 5, cy + 12, cx + 5, cy + 12);
+        line(ctx, &d, cx - 5, cy - 3, cx + 5, cy - 3);
+        arc(ctx, 2, KG_C_ACCENT, cx, cy + 2, 1, 0, 360);
+        arc(ctx, 2, KG_C_ACCENT, cx, cy - 3, 6, 240, 300);
+        arc(ctx, 2, KG_C_ACCENT, cx, cy - 3, 11, 245, 295);
+        break;
+    case KG_ICON_SYSTEM: { /* chip */
+        line(ctx, &d, cx - 7, cy - 7, cx + 7, cy - 7);
+        line(ctx, &d, cx - 7, cy + 7, cx + 7, cy + 7);
+        line(ctx, &d, cx - 7, cy - 7, cx - 7, cy + 7);
+        line(ctx, &d, cx + 7, cy - 7, cx + 7, cy + 7);
+        for (int k = -4; k <= 4; k += 4) {
+            line(ctx, &d, cx + k, cy - 8, cx + k, cy - 12);
+            line(ctx, &d, cx + k, cy + 8, cx + k, cy + 12);
+            line(ctx, &d, cx - 8, cy + k, cx - 12, cy + k);
+            line(ctx, &d, cx + 8, cy + k, cx + 12, cy + k);
+        }
+        lv_draw_rect_dsc_t r;
+        lv_draw_rect_dsc_init(&r);
+        r.bg_color = KG_C_ACCENT;
+        lv_area_t c = {cx - 2, cy - 2, cx + 2, cy + 2};
+        lv_draw_rect(ctx, &r, &c);
+        break;
+    }
+    case KG_ICON_LEVEL: /* spirit level: tube and bubble */
+        arc(ctx, 2, KG_C_HAND, cx, cy, 11, 0, 360);
+        line(ctx, &d, cx - 11, cy, cx - 6, cy);
+        line(ctx, &d, cx + 6, cy, cx + 11, cy);
+        line(ctx, &d, cx, cy - 11, cx, cy - 6);
+        line(ctx, &d, cx, cy + 6, cx, cy + 11);
+        arc(ctx, 2, KG_C_ACCENT, cx + 2, cy - 2, 3, 0, 360);
+        break;
+    case KG_ICON_WORLD: /* globe */
+        arc(ctx, 2, KG_C_HAND, cx, cy, 11, 0, 360);
+        line(ctx, &d, cx - 11, cy, cx + 11, cy);
+        line(ctx, &d, cx - 9, cy - 6, cx + 9, cy - 6);
+        line(ctx, &d, cx - 9, cy + 6, cx + 9, cy + 6);
+        arc(ctx, 2, KG_C_ACCENT, cx + 12, cy, 16, 137, 223);
+        arc(ctx, 2, KG_C_ACCENT, cx - 12, cy, 16, 317, 43);
+        break;
+    case KG_ICON_SKY: /* sunrise */
+        arc(ctx, 2, KG_C_ACCENT, cx, cy + 5, 6, 180, 360);
+        line(ctx, &d, cx - 12, cy + 6, cx + 12, cy + 6);
+        line(ctx, &acc, cx, cy - 4, cx, cy - 8);
+        line(ctx, &acc, cx - 8, cy - 2, cx - 10, cy - 4);
+        line(ctx, &acc, cx + 8, cy - 2, cx + 10, cy - 4);
+        line(ctx, &d, cx - 7, cy + 11, cx + 7, cy + 11);
+        break;
+    case KG_ICON_TORCH: /* flashlight */
+        line(ctx, &d, cx - 3, cy, cx - 3, cy + 12);
+        line(ctx, &d, cx + 3, cy, cx + 3, cy + 12);
+        line(ctx, &d, cx - 3, cy + 12, cx + 3, cy + 12);
+        line(ctx, &d, cx - 3, cy, cx - 7, cy - 5);
+        line(ctx, &d, cx + 3, cy, cx + 7, cy - 5);
+        line(ctx, &d, cx - 7, cy - 5, cx + 7, cy - 5);
+        line(ctx, &acc, cx, cy - 8, cx, cy - 12);
+        line(ctx, &acc, cx - 6, cy - 8, cx - 9, cy - 11);
+        line(ctx, &acc, cx + 6, cy - 8, cx + 9, cy - 11);
+        break;
     }
 }
 
@@ -113,7 +187,7 @@ static void icon_draw_cb(lv_event_t *e)
     const kg_app_t *app = lv_event_get_user_data(e);
     lv_area_t a;
     lv_obj_get_coords(o, &a);
-    draw_icon(lv_event_get_draw_ctx(e), app->icon, (a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
+    ui_nav_draw_icon(lv_event_get_draw_ctx(e), app->icon, (a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
 }
 
 /* --------------------------------------------------------------- launcher */
@@ -133,16 +207,46 @@ static void launcher_gesture(lv_event_t *e)
     }
 }
 
+#define PER_PAGE 9
+#define N_PAGES ((N_APPS + PER_PAGE - 1) / PER_PAGE)
+
+static void pages_scrolled(lv_event_t *e)
+{
+    (void)e;
+    int page = (lv_obj_get_scroll_x(s_pages) + KG_W / 2) / KG_W;
+    for (int i = 0; i < N_PAGES; i++)
+        lv_obj_set_style_bg_color(s_dots[i], i == page ? KG_C_ACCENT : KG_C_TRACK, 0);
+}
+
 static lv_obj_t *launcher_create(void)
 {
     lv_obj_t *scr = kit_screen();
+    /* Pages side by side in a horizontally scrolling strip that snaps one page at a time. A
+     * vertical swipe does not scroll it, so it still reaches the screen (close). */
+    s_pages = lv_obj_create(scr);
+    lv_obj_remove_style_all(s_pages);
+    lv_obj_set_size(s_pages, KG_W, KG_H);
+    lv_obj_set_scroll_dir(s_pages, LV_DIR_HOR);
+    lv_obj_set_scroll_snap_x(s_pages, LV_SCROLL_SNAP_START);
+    lv_obj_add_flag(s_pages, LV_OBJ_FLAG_SCROLL_ONE);
+    lv_obj_set_scrollbar_mode(s_pages, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_event_cb(s_pages, pages_scrolled, LV_EVENT_SCROLL, NULL);
+    lv_obj_t *page = NULL;
     for (int i = 0; i < N_APPS; i++) {
-        lv_coord_t cx = (i % 2) ? 176 : 64, cy = 42 + (i / 2) * 76;
+        if (i % PER_PAGE == 0) {
+            page = lv_obj_create(s_pages);
+            lv_obj_remove_style_all(page);
+            lv_obj_set_size(page, KG_W, KG_H);
+            lv_obj_set_pos(page, (i / PER_PAGE) * KG_W, 0);
+            lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+        }
+        int k = i % PER_PAGE;
+        lv_coord_t cx = 42 + (k % 3) * 78, cy = 37 + (k / 3) * 76;
         /* Round sub-dial-style button: recessed background, rim, pictogram. */
-        lv_obj_t *b = lv_btn_create(scr);
+        lv_obj_t *b = lv_btn_create(page);
         lv_obj_remove_style_all(b);
-        lv_obj_set_size(b, 52, 52);
-        lv_obj_set_pos(b, cx - 26, cy - 26);
+        lv_obj_set_size(b, 48, 48);
+        lv_obj_set_pos(b, cx - 24, cy - 24);
         lv_obj_set_style_radius(b, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(b, KG_C_SUBDIAL, 0);
         lv_obj_set_style_bg_grad_color(b, KG_C_GUILLOCHE, 0);
@@ -157,18 +261,37 @@ static lv_obj_t *launcher_create(void)
         lv_obj_add_event_cb(b, open_app_cb, LV_EVENT_CLICKED, (void *)APPS[i]);
         lv_obj_add_event_cb(b, (lv_event_cb_t)kit_tick, LV_EVENT_PRESSED, NULL);
 
-        lv_obj_t *l = kit_label(scr, &kg_font_text_16, KG_C_TEXT, APPS[i]->label);
-        lv_obj_set_width(l, 110);
+        lv_obj_t *l = kit_label(page, &kg_font_text_16, KG_C_TEXT, APPS[i]->label);
+        lv_obj_set_width(l, 78);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_pos(l, cx - 55, cy + 28);
+        lv_obj_set_pos(l, cx - 39, cy + 25);
     }
+    /* Page dots, at the top edge. */
+    for (int i = 0; i < N_PAGES; i++) {
+        s_dots[i] = lv_obj_create(scr);
+        lv_obj_remove_style_all(s_dots[i]);
+        lv_obj_set_size(s_dots[i], 5, 5);
+        lv_obj_set_style_radius(s_dots[i], LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(s_dots[i], LV_OPA_COVER, 0);
+        lv_obj_set_pos(s_dots[i], KG_W / 2 - N_PAGES * 5 + i * 10, 3);
+        lv_obj_clear_flag(s_dots[i], LV_OBJ_FLAG_CLICKABLE);
+    }
+    pages_scrolled(NULL);
     lv_obj_add_event_cb(scr, launcher_gesture, LV_EVENT_GESTURE, NULL);
     return scr;
+}
+
+void ui_nav_launcher_page(int page)
+{
+    if (!s_launcher) s_launcher = launcher_create();
+    lv_obj_scroll_to_x(s_pages, page * KG_W, LV_ANIM_OFF);
+    pages_scrolled(NULL);
 }
 
 void ui_nav_open_launcher(void)
 {
     if (!s_launcher) s_launcher = launcher_create();
+    ui_nav_launcher_page(0); /* from a face, always the first page */
     if (kg_transition(s_launcher, KG_SLIDE_UP)) {
         s_in_launcher = true;
         ui_faces_set_visible(false);
