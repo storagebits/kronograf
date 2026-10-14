@@ -52,10 +52,13 @@ void hal_now(struct tm *out, uint32_t *ms)
     const char *fixed = getenv("KG_TIME");
     int h, m, s;
     if (fixed && sscanf(fixed, "%d:%d:%d", &h, &m, &s) == 3) {
-        out->tm_hour = h;
-        out->tm_min = m;
-        out->tm_sec = s;
-        if (ms) *ms = 0;
+        /* KG_TIME_RUN=1: the clock starts at KG_TIME and keeps running (recordings). */
+        uint32_t run = getenv("KG_TIME_RUN") ? SDL_GetTicks() : 0;
+        int t = h * 3600 + m * 60 + s + (int)(run / 1000);
+        out->tm_hour = t / 3600 % 24;
+        out->tm_min = t / 60 % 60;
+        out->tm_sec = t % 60;
+        if (ms) *ms = run % 1000;
     }
 }
 
@@ -279,8 +282,12 @@ bool hal_notif_get(int i, kg_notif_t *out)
     return false;
 }
 
-/* A "new" notification arrives shortly after start-up when KG_NOTIF_ALERT=1. */
-uint32_t hal_notif_seq(void) { return SDL_GetTicks() > 150 ? (uint32_t)env_int("KG_NOTIF_ALERT", 0) : 0; }
+/* A "new" notification arrives shortly after start-up (or at KG_NOTIF_AT ms) when
+ * KG_NOTIF_ALERT=1. */
+uint32_t hal_notif_seq(void)
+{
+    return SDL_GetTicks() > (uint32_t)env_int("KG_NOTIF_AT", 150) ? (uint32_t)env_int("KG_NOTIF_ALERT", 0) : 0;
+}
 
 void hal_notif_dismiss(uint32_t uid)
 {

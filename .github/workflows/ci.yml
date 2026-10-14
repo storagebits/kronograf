@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Parser tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the host tests
+        run: |
+          cc -Wall -Wextra -Werror -I src tests/test_data.c src/data/kg_*.c -o kg_test
+          ./kg_test tests/data/openmeteo-montreal.json
+
+  simulator:
+    name: Simulator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - name: Build
+        run: |
+          cmake -S sim -B sim/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build sim/build -j"$(nproc)"
+      - name: Render screenshots
+        run: |
+          mkdir -p shots
+          for face in 0 1 2; do
+            KG_TIME=10:09:30 KG_FACE=$face sim/build/kronograf_sim --shot shots/face$face.png
+          done
+          for app in launcher chrono timer alarms steps weather settings notifs; do
+            KG_TIME=10:09:30 KG_APP=$app sim/build/kronograf_sim --shot shots/$app.png
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: shots/
+
+  firmware:
+    name: Firmware (T-Watch 2020 V1)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install platformio==6.2.0
+      - name: Build
+        run: pio run -e twatch-v1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-twatch-v1
+          path: |
+            .pio/build/twatch-v1/firmware.bin
+            .pio/build/twatch-v1/bootloader.bin
+            .pio/build/twatch-v1/partitions.bin

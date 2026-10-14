@@ -4,6 +4,7 @@
  *   kronograf_sim                       interactive window (mouse = finger), ×3 scale
  *   kronograf_sim --shot out.png        headless render of one frame, then exit
  *   kronograf_sim --scale 2             changes the window scale
+ *   kronograf_sim --record dir          plays the scripted demo, one PNG per frame (README GIF)
  */
 #include "lvgl.h"
 #include "../src/ui/ui.h"
@@ -44,6 +45,36 @@ static void pointer_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
     data->state = s_mouse_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
+/* Scripted demo for the README GIF: pointer strokes on a timeline (ms, 240 px space). The
+ * pointer is down between t0 and t1, moving linearly from (x0, y0) to (x1, y1). */
+typedef struct {
+    uint32_t t0, t1;
+    int x0, y0, x1, y1;
+} stroke_t;
+static const stroke_t DEMO[] = {
+    {3000, 3220, 205, 120, 35, 120},     /* aviator → time circuits */
+    {5200, 6400, 120, 120, 120, 120},    /* long press on PRESENT TIME: discharge */
+    {8600, 8820, 205, 120, 35, 120},     /* → night */
+    {10400, 10620, 120, 205, 120, 35},   /* swipe up: launcher */
+    {12000, 12080, 65, 195, 65, 195},    /* tap Weather */
+    {18600, 18680, 175, 215, 175, 215},  /* OK on the notification card */
+};
+static const uint32_t DEMO_END_MS = 20500;
+#define RECORD_FPS 20
+
+static void demo_pointer(uint32_t t)
+{
+    s_mouse_down = 0;
+    for (size_t i = 0; i < sizeof DEMO / sizeof DEMO[0]; i++) {
+        const stroke_t *k = &DEMO[i];
+        if (t < k->t0 || t > k->t1) continue;
+        int span = (int)(k->t1 - k->t0), p = (int)(t - k->t0);
+        s_mouse_x = (k->x0 + (k->x1 - k->x0) * p / span) * s_scale;
+        s_mouse_y = (k->y0 + (k->y1 - k->y0) * p / span) * s_scale;
+        s_mouse_down = 1;
+    }
+}
+
 static int write_png(const char *path)
 {
     static uint8_t rgb[KG_W * KG_H * 3];
@@ -59,13 +90,14 @@ static int write_png(const char *path)
 
 int main(int argc, char **argv)
 {
-    const char *shot = NULL;
+    const char *shot = NULL, *record = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) s_scale = atoi(argv[++i]);
     }
 
-    SDL_Init(shot ? SDL_INIT_TIMER : SDL_INIT_VIDEO | SDL_INIT_TIMER);
+    SDL_Init(shot || record ? SDL_INIT_TIMER : SDL_INIT_VIDEO | SDL_INIT_TIMER);
     lv_init();
 
     static lv_disp_draw_buf_t draw_buf;
@@ -106,6 +138,25 @@ int main(int argc, char **argv)
         else if (app && !strcmp(app, "notifs")) ui_notif_open_list();
         else if (app) ui_nav_open_app(app);
         if (getenv("KG_ALERT")) ui_nav_test_alert(!strcmp(getenv("KG_ALERT"), "alarm"));
+    }
+
+    if (record) {
+        uint32_t start = SDL_GetTicks(), next = 0;
+        int frame = 0;
+        char path[512];
+        for (uint32_t t = 0; t < DEMO_END_MS; t = SDL_GetTicks() - start) {
+            demo_pointer(t);
+            lv_timer_handler();
+            if (t >= next) {
+                lv_refr_now(NULL);
+                snprintf(path, sizeof path, "%s/frame%04d.png", record, frame++);
+                if (write_png(path)) return 1;
+                next += 1000 / RECORD_FPS;
+            }
+            SDL_Delay(1);
+        }
+        printf("recorded %d frames in %s\n", frame, record);
+        return 0;
     }
 
     if (shot) {

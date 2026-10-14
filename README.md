@@ -1,6 +1,13 @@
 # Kronograf
 
+[![CI](https://github.com/storagebits/kronograf/actions/workflows/ci.yml/badge.svg)](https://github.com/storagebits/kronograf/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **A from-scratch firmware for the LilyGO T-Watch 2020**: an aviation chronograph face, "time circuits" 7-segment displays straight out of *Back to the Future*, Montréal weather and real-time bus departures, and iPhone notifications. ESP32, LVGL 8.3, and a macOS simulator that builds exactly the same interface.
+
+<p align="center">
+  <img src="docs/screens/kronograf-demo.gif" width="360" alt="Demo: aviator face, time circuits with the lightning easter egg, night face, launcher, weather and an iPhone notification">
+</p>
 
 ![Kronograf: watch faces, launcher, weather, notifications, timer, alarms](docs/screens/kronograf-overview.png)
 
@@ -36,6 +43,7 @@ cp include/secrets.example.h include/secrets.h   # optional: Wi-Fi, STM key, OTA
 cmake -S sim -B sim/build -DCMAKE_BUILD_TYPE=Release && cmake --build sim/build -j8
 sim/build/kronograf_sim                                       # ×3 window, the mouse is your finger
 KG_TIME=10:09:30 sim/build/kronograf_sim --shot shot.png      # headless PNG screenshot
+tools/make_demo_gif.sh                                        # re-records the demo GIF (ffmpeg)
 ```
 
 The simulated HAL is driven by environment variables: `KG_TIME`, `KG_FACE`, `KG_APP` (`chrono`, `weather`, `notifs`…), `KG_BATT`, `KG_STEPS`, `KG_REV`, `KG_WX_CODE`, `KG_WX_TEMP`, `KG_BUS_STOPS`, `KG_BLE`, `KG_NOTIF_CAT`, `KG_ALERT`…
@@ -92,9 +100,9 @@ src/data/        plain C, host-tested: Open-Meteo, GTFS-RT (streamed protobuf), 
 src/hal/hal.h    the only hardware interface the UI sees
 src/hal/device/  T-Watch: display (esp_lcd, DMA), AXP202, BMA423, network, BLE, safeguards
 src/hal/sim/     simulated implementation
-sim/             SDL2 harness and PNG screenshots
+sim/             SDL2 harness, PNG screenshots, scripted demo recording
 tests/           parser tests (cc -I src tests/test_data.c src/data/kg_*.c)
-tools/           backup and block flashing, console, fonts, contact sheets
+tools/           backup and block flashing, console, fonts, contact sheets, demo GIF
 ```
 
 A few structural choices, detailed in [`DECISIONS.md`](DECISIONS.md):
